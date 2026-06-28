@@ -54,9 +54,8 @@ firebase_options.dart
 .env.*.local
 
 # Generated files
-*.g.dart
-*.freezed.dart
 *.config.dart
+# Note: *.g.dart dan *.freezed.dart di-track agar build tidak perlu run di CI
 
 # Coverage
 coverage/

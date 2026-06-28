@@ -27,7 +27,7 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onDowngrade: onDatabaseDowngradeDelete,
@@ -86,6 +86,7 @@ class DatabaseHelper {
     await _createPaymentMethodsTable(db);
     await _createPendingOperationsTable(db);
     await _createSyncLogTable(db);
+    await _createCategoriesTable(db);
     await _createIndexes(db);
   }
 
@@ -99,6 +100,7 @@ class DatabaseHelper {
     await db.execute('DROP TABLE IF EXISTS payment_methods');
     await db.execute('DROP TABLE IF EXISTS pending_operations');
     await db.execute('DROP TABLE IF EXISTS sync_log');
+    await db.execute('DROP TABLE IF EXISTS categories');
     await _onCreate(db, newVersion);
     debugPrint('DatabaseHelper: onUpgrade v$oldVersion→v$newVersion done');
   }
@@ -231,6 +233,27 @@ class DatabaseHelper {
     ''');
   }
 
+  /// Create categories table
+  Future<void> _createCategoriesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE categories(
+        id TEXT PRIMARY KEY,
+        firebaseDocId TEXT,
+        userId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        icon TEXT NOT NULL,
+        color INTEGER NOT NULL,
+        isPreset INTEGER DEFAULT 0,
+        isActive INTEGER DEFAULT 1,
+        isSynced INTEGER DEFAULT 0,
+        syncedAt INTEGER,
+        localCreatedAt INTEGER NOT NULL,
+        updatedAt INTEGER,
+        isDeleted INTEGER DEFAULT 0
+      )
+    ''');
+  }
+
   /// Create sync_log table (untuk audit trail)
   Future<void> _createSyncLogTable(Database db) async {
     await db.execute('''
@@ -289,6 +312,14 @@ class DatabaseHelper {
         'CREATE INDEX idx_pending_operations_status ON pending_operations(status)');
     await db.execute(
         'CREATE INDEX idx_pending_operations_timestamp ON pending_operations(timestamp)');
+
+    // Categories indexes
+    await db.execute(
+        'CREATE INDEX idx_categories_userId ON categories(userId)');
+    await db.execute(
+        'CREATE INDEX idx_categories_isPreset ON categories(isPreset)');
+    await db.execute(
+        'CREATE INDEX idx_categories_isDeleted ON categories(isDeleted)');
   }
 
   /// Close database
