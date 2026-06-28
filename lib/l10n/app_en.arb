@@ -1,0 +1,65 @@
+{
+  "@@locale": "en",
+  "appTitle": "Financial App",
+  "@appTitle": {
+    "description": "Application title"
+  },
+  
+  "home": "Home",
+  "transactions": "Transactions",
+  "bills": "Bills",
+  "more": "More",
+  
+  "description": "Description",
+  "category": "Category",
+  "paymentMethod": "Payment Method",
+  "nominal": "Amount",
+  "date": "Date",
+  "notes": "Notes",
+  
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "edit": "Edit",
+  "add": "Add",
+  
+  "incomeCategory": "Income",
+  "expenseCategory": "Expense",
+  
+  "billStatusUnpaid": "Unpaid",
+  "billStatusPartial": "Partial",
+  "billStatusPaid": "Paid",
+  
+  "syncStatusSyncing": "Syncing...",
+  "syncStatusSynced": "Synced ✓",
+  "syncStatusFailed": "Sync Failed ✗",
+  "syncStatusOffline": "Offline",
+  
+  "offlineModeMessage": "Offline Mode — Changes will sync when online",
+  
+  "deleteConfirmation": "Are you sure you want to delete this data?",
+  "yes": "Yes",
+  "no": "No",
+  
+  "transactionSaved": "Transaction saved successfully",
+  "dataDeleted": "Data deleted successfully",
+  
+  "validationNominalRequired": "Amount must be greater than 0",
+  "validationDescriptionRequired": "Description is required",
+  
+  "income": "Income",
+  "expense": "Expense",
+  "balance": "Balance",
+  "thisMonth": "This Month",
+  "thisYear": "This Year",
+  
+  "custodyReceived": "Money Received",
+  "custodyGiven": "Money Given",
+  "currentBalance": "Current Balance",
+  "addMovement": "Add Movement",
+  
+  "searchTransactions": "Search transactions...",
+  "noTransactions": "No transactions yet",
+  "noBills": "No bills yet",
+  "noCustody": "No custody yet"
+}
