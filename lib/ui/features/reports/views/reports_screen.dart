@@ -344,7 +344,7 @@ class _ReportsScreenState extends State<ReportsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Pengeluaran per Metode Pembayaran',
+            Text('Pengeluaran per Kategori',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             SizedBox(

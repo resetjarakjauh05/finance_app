@@ -27,7 +27,7 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 6,
+      version: 10,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onDowngrade: onDatabaseDowngradeDelete,
@@ -46,6 +46,14 @@ class DatabaseHelper {
             "ALTER TABLE bills ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0",
           );
           debugPrint('DB onOpen: added bills.isDeleted');
+        }
+        if (!billsColNames.contains('categoryId')) {
+          await db.execute("ALTER TABLE bills ADD COLUMN categoryId TEXT");
+          debugPrint('DB onOpen: added bills.categoryId');
+        }
+        if (!billsColNames.contains('categoryName')) {
+          await db.execute("ALTER TABLE bills ADD COLUMN categoryName TEXT");
+          debugPrint('DB onOpen: added bills.categoryName');
         }
 
         // Ensure custody table has all required columns
@@ -73,6 +81,147 @@ class DatabaseHelper {
           );
           debugPrint('DB onOpen: added custody_movements.custodyFirebaseDocId');
         }
+
+        // Ensure transactions table has categoryId + categoryName
+        final txCols = await db.rawQuery('PRAGMA table_info(transactions)');
+        final txColNames = txCols.map((c) => c['name'] as String).toSet();
+        if (!txColNames.contains('categoryId')) {
+          await db.execute("ALTER TABLE transactions ADD COLUMN categoryId TEXT");
+          debugPrint('DB onOpen: added transactions.categoryId');
+        }
+        if (!txColNames.contains('categoryName')) {
+          await db.execute("ALTER TABLE transactions ADD COLUMN categoryName TEXT");
+          debugPrint('DB onOpen: added transactions.categoryName');
+        }
+
+        // Ensure spending_limits table exists
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS spending_limits(
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            categoryId TEXT,
+            categoryName TEXT,
+            categoryIcon TEXT,
+            dailyLimit INTEGER NOT NULL,
+            warningThreshold REAL DEFAULT 0.8,
+            isActive INTEGER DEFAULT 1,
+            firebaseDocId TEXT,
+            isSynced INTEGER DEFAULT 0,
+            syncedAt INTEGER,
+            localCreatedAt INTEGER NOT NULL,
+            updatedAt INTEGER,
+            isDeleted INTEGER DEFAULT 0
+          )
+        ''');
+        debugPrint('DB onOpen: spending_limits table ensured');
+
+        // Ensure categories table exists
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS categories(
+            id TEXT PRIMARY KEY,
+            firebaseDocId TEXT,
+            userId TEXT NOT NULL,
+            name TEXT NOT NULL,
+            icon TEXT NOT NULL,
+            color INTEGER NOT NULL,
+            isPreset INTEGER DEFAULT 0,
+            isActive INTEGER DEFAULT 1,
+            isSynced INTEGER DEFAULT 0,
+            syncedAt INTEGER,
+            localCreatedAt INTEGER NOT NULL,
+            updatedAt INTEGER,
+            isDeleted INTEGER DEFAULT 0
+          )
+        ''');
+        debugPrint('DB onOpen: categories table ensured');
+
+        // Ensure monthly_budgets table exists
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS monthly_budgets(
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            yearMonth TEXT NOT NULL,
+            categoryId TEXT NOT NULL,
+            categoryName TEXT NOT NULL,
+            categoryIcon TEXT NOT NULL,
+            budgetAmount INTEGER NOT NULL,
+            notes TEXT,
+            firebaseDocId TEXT,
+            isSynced INTEGER DEFAULT 0,
+            syncedAt INTEGER,
+            localCreatedAt INTEGER NOT NULL,
+            updatedAt INTEGER,
+            isDeleted INTEGER DEFAULT 0
+          )
+        ''');
+        debugPrint('DB onOpen: monthly_budgets table ensured');
+
+        // Ensure savings_plans table exists
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS savings_plans(
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            icon TEXT,
+            targetAmount INTEGER NOT NULL,
+            savedAmount INTEGER DEFAULT 0,
+            monthlyTarget INTEGER DEFAULT 0,
+            targetDate INTEGER,
+            isActive INTEGER DEFAULT 1,
+            firebaseDocId TEXT,
+            isSynced INTEGER DEFAULT 0,
+            syncedAt INTEGER,
+            localCreatedAt INTEGER NOT NULL,
+            updatedAt INTEGER,
+            isDeleted INTEGER DEFAULT 0
+          )
+        ''');
+        debugPrint('DB onOpen: savings_plans table ensured');
+
+        // Ensure savings_allocations table exists
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS savings_allocations(
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            savingsPlanId TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            notes TEXT,
+            date INTEGER NOT NULL,
+            fromPaymentMethodId TEXT NOT NULL DEFAULT '',
+            fromPaymentMethodName TEXT NOT NULL DEFAULT '',
+            toPaymentMethodId TEXT,
+            toPaymentMethodName TEXT,
+            firebaseDocId TEXT,
+            isSynced INTEGER DEFAULT 0,
+            localCreatedAt INTEGER NOT NULL,
+            isDeleted INTEGER DEFAULT 0
+          )
+        ''');
+        // ALTER TABLE untuk device yang sudah punya tabel lama
+        final allocCols = await db.rawQuery('PRAGMA table_info(savings_allocations)');
+        final allocColNames = allocCols.map((c) => c['name'] as String).toSet();
+        if (!allocColNames.contains('fromPaymentMethodId')) {
+          await db.execute("ALTER TABLE savings_allocations ADD COLUMN fromPaymentMethodId TEXT NOT NULL DEFAULT ''");
+          debugPrint('DB onOpen: added savings_allocations.fromPaymentMethodId');
+        }
+        if (!allocColNames.contains('fromPaymentMethodName')) {
+          await db.execute("ALTER TABLE savings_allocations ADD COLUMN fromPaymentMethodName TEXT NOT NULL DEFAULT ''");
+          debugPrint('DB onOpen: added savings_allocations.fromPaymentMethodName');
+        }
+        if (!allocColNames.contains('toPaymentMethodId')) {
+          await db.execute("ALTER TABLE savings_allocations ADD COLUMN toPaymentMethodId TEXT");
+          debugPrint('DB onOpen: added savings_allocations.toPaymentMethodId');
+        }
+        if (!allocColNames.contains('toPaymentMethodName')) {
+          await db.execute("ALTER TABLE savings_allocations ADD COLUMN toPaymentMethodName TEXT");
+          debugPrint('DB onOpen: added savings_allocations.toPaymentMethodName');
+        }
+        if (!allocColNames.contains('transferFee')) {
+          await db.execute("ALTER TABLE savings_allocations ADD COLUMN transferFee INTEGER NOT NULL DEFAULT 0");
+          debugPrint('DB onOpen: added savings_allocations.transferFee');
+        }
+        debugPrint('DB onOpen: savings_allocations table ensured');
       },
     );
   }
@@ -87,6 +236,10 @@ class DatabaseHelper {
     await _createPendingOperationsTable(db);
     await _createSyncLogTable(db);
     await _createCategoriesTable(db);
+    await _createSpendingLimitsTable(db);
+    await _createMonthlyBudgetsTable(db);
+    await _createSavingsPlansTable(db);
+    await _createSavingsAllocationsTable(db);
     await _createIndexes(db);
   }
 
@@ -101,6 +254,10 @@ class DatabaseHelper {
     await db.execute('DROP TABLE IF EXISTS pending_operations');
     await db.execute('DROP TABLE IF EXISTS sync_log');
     await db.execute('DROP TABLE IF EXISTS categories');
+    await db.execute('DROP TABLE IF EXISTS spending_limits');
+    await db.execute('DROP TABLE IF EXISTS monthly_budgets');
+    await db.execute('DROP TABLE IF EXISTS savings_plans');
+    await db.execute('DROP TABLE IF EXISTS savings_allocations');
     await _onCreate(db, newVersion);
     debugPrint('DatabaseHelper: onUpgrade v$oldVersion→v$newVersion done');
   }
@@ -119,6 +276,8 @@ class DatabaseHelper {
         nominal INTEGER NOT NULL,
         date INTEGER NOT NULL,
         notes TEXT,
+        categoryId TEXT,
+        categoryName TEXT,
         isSynced INTEGER DEFAULT 0,
         syncedAt INTEGER,
         localCreatedAt INTEGER NOT NULL,
@@ -142,6 +301,8 @@ class DatabaseHelper {
         status TEXT NOT NULL,
         type TEXT NOT NULL DEFAULT 'HUTANG',
         category TEXT,
+        categoryId TEXT,
+        categoryName TEXT,
         notes TEXT,
         isSynced INTEGER DEFAULT 0,
         syncedAt INTEGER,
@@ -233,6 +394,97 @@ class DatabaseHelper {
     ''');
   }
 
+  /// Create savings_plans table
+  Future<void> _createSavingsPlansTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE savings_plans(
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        icon TEXT,
+        targetAmount INTEGER NOT NULL,
+        savedAmount INTEGER DEFAULT 0,
+        monthlyTarget INTEGER DEFAULT 0,
+        targetDate INTEGER,
+        isActive INTEGER DEFAULT 1,
+        firebaseDocId TEXT,
+        isSynced INTEGER DEFAULT 0,
+        syncedAt INTEGER,
+        localCreatedAt INTEGER NOT NULL,
+        updatedAt INTEGER,
+        isDeleted INTEGER DEFAULT 0
+      )
+    ''');
+  }
+
+  /// Create savings_allocations table
+  Future<void> _createSavingsAllocationsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE savings_allocations(
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        savingsPlanId TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        notes TEXT,
+        date INTEGER NOT NULL,
+        fromPaymentMethodId TEXT NOT NULL DEFAULT '',
+        fromPaymentMethodName TEXT NOT NULL DEFAULT '',
+        toPaymentMethodId TEXT,
+        toPaymentMethodName TEXT,
+        transferFee INTEGER NOT NULL DEFAULT 0,
+        firebaseDocId TEXT,
+        isSynced INTEGER DEFAULT 0,
+        localCreatedAt INTEGER NOT NULL,
+        isDeleted INTEGER DEFAULT 0
+      )
+    ''');
+  }
+
+  /// Create monthly_budgets table
+  Future<void> _createMonthlyBudgetsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE monthly_budgets(
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        yearMonth TEXT NOT NULL,
+        categoryId TEXT NOT NULL,
+        categoryName TEXT NOT NULL,
+        categoryIcon TEXT NOT NULL,
+        budgetAmount INTEGER NOT NULL,
+        notes TEXT,
+        firebaseDocId TEXT,
+        isSynced INTEGER DEFAULT 0,
+        syncedAt INTEGER,
+        localCreatedAt INTEGER NOT NULL,
+        updatedAt INTEGER,
+        isDeleted INTEGER DEFAULT 0
+      )
+    ''');
+  }
+
+  /// Create spending_limits table
+  Future<void> _createSpendingLimitsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE spending_limits(
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        categoryId TEXT,
+        categoryName TEXT,
+        categoryIcon TEXT,
+        dailyLimit INTEGER NOT NULL,
+        warningThreshold REAL DEFAULT 0.8,
+        isActive INTEGER DEFAULT 1,
+        firebaseDocId TEXT,
+        isSynced INTEGER DEFAULT 0,
+        syncedAt INTEGER,
+        localCreatedAt INTEGER NOT NULL,
+        updatedAt INTEGER,
+        isDeleted INTEGER DEFAULT 0
+      )
+    ''');
+  }
+
   /// Create categories table
   Future<void> _createCategoriesTable(Database db) async {
     await db.execute('''
@@ -320,6 +572,28 @@ class DatabaseHelper {
         'CREATE INDEX idx_categories_isPreset ON categories(isPreset)');
     await db.execute(
         'CREATE INDEX idx_categories_isDeleted ON categories(isDeleted)');
+
+    // Spending limits indexes
+    await db.execute(
+        'CREATE INDEX idx_spending_limits_userId ON spending_limits(userId)');
+    await db.execute(
+        'CREATE INDEX idx_spending_limits_categoryId ON spending_limits(categoryId)');
+    await db.execute(
+        'CREATE INDEX idx_spending_limits_isActive ON spending_limits(isActive)');
+
+    // Monthly budgets indexes
+    await db.execute(
+        'CREATE INDEX idx_monthly_budgets_userId ON monthly_budgets(userId)');
+    await db.execute(
+        'CREATE INDEX idx_monthly_budgets_yearMonth ON monthly_budgets(yearMonth)');
+    await db.execute(
+        'CREATE INDEX idx_monthly_budgets_categoryId ON monthly_budgets(categoryId)');
+
+    // Savings plans indexes
+    await db.execute(
+        'CREATE INDEX idx_savings_plans_userId ON savings_plans(userId)');
+    await db.execute(
+        'CREATE INDEX idx_savings_allocations_planId ON savings_allocations(savingsPlanId)');
   }
 
   /// Close database

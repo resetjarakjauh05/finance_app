@@ -97,6 +97,22 @@ class _TransferScreenState extends State<TransferScreen> {
         ? _notesController.text.trim()
         : 'Transfer: ${_fromMethod!.name} → ${_toMethod!.name}';
 
+    // Cek saldo metode asal
+    final repo = TransactionRepository(service: TransactionService());
+    final saldo = await repo.getBalanceForPaymentMethod(
+        widget.userId, _fromMethod!.id);
+    if (saldo < totalKeluar) {
+      if (!mounted) return;
+      await showErrorDialog(
+        context,
+        title: 'Saldo Tidak Mencukupi',
+        message:
+            'Saldo ${_fromMethod!.name} hanya ${_currencyFormat.format(saldo)}. '
+            'Tidak cukup untuk transfer ${_currencyFormat.format(totalKeluar)}${fee > 0 ? ' (termasuk biaya ${_currencyFormat.format(fee)})' : ''}.',
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {

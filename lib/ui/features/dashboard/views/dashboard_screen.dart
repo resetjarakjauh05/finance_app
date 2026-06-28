@@ -18,6 +18,10 @@ import '../../custody/views/custody_screen.dart';
 import '../../reports/views/reports_screen.dart';
 import '../../settings/views/settings_screen.dart';
 import '../../settings/views/help_screen.dart';
+import '../../categories/views/category_list_screen.dart';
+import '../../spending_limit/views/spending_limit_screen.dart';
+import '../../budget/views/monthly_budget_screen.dart';
+import '../../savings/views/savings_plan_screen.dart';
 import '../../transactions/views/transfer_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -102,6 +106,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _isLoadingBalance = true);
     try {
       final repo = TransactionRepository(service: TransactionService());
+      // Sync Firestore → SQLite dulu agar data terkini
+      await repo.initialSyncFromFirestore(user.id);
       final results = await Future.wait([
         repo.getTotalIncome(user.id),
         repo.getTotalExpense(user.id),
@@ -742,6 +748,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (context) => ReportsScreen(userId: user.id),
+                ),
+              );
+            }
+          },
+        ),
+        const Divider(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Text('Perencanaan',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                  )),
+        ),
+        ListTile(
+          leading: const Icon(Icons.category_outlined),
+          title: const Text('Kategori'),
+          subtitle: const Text('Kelola kategori pengeluaran'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            if (user != null) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => CategoryListScreen(userId: user.id),
+                ),
+              );
+            }
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.speed_outlined),
+          title: const Text('Limit Harian'),
+          subtitle: const Text('Atur batas pengeluaran harian'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            if (user != null) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => SpendingLimitScreen(userId: user.id),
+                ),
+              );
+            }
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.pie_chart_outline),
+          title: const Text('Anggaran Bulanan'),
+          subtitle: const Text('Rencanakan pengeluaran per kategori'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            if (user != null) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => MonthlyBudgetScreen(userId: user.id),
+                ),
+              );
+            }
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.savings_outlined),
+          title: const Text('Rencana Tabungan'),
+          subtitle: const Text('Kelola target tabungan'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            if (user != null) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => SavingsPlanScreen(userId: user.id),
                 ),
               );
             }

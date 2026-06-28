@@ -3,6 +3,7 @@ import '../../../../domain/models/transaction_model.dart';
 import '../../../../domain/models/payment_method_model.dart';
 import '../../../../data/repositories/transaction_repository.dart';
 import '../../../../data/repositories/payment_method_repository.dart';
+import '../../../../data/services/notification_service.dart';
 
 /// ViewModel untuk transaction management
 class TransactionViewModel extends ChangeNotifier {
@@ -113,6 +114,8 @@ class TransactionViewModel extends ChangeNotifier {
     required int nominal,
     required DateTime date,
     String? notes,
+    String? categoryId,
+    String? categoryName,
   }) async {
     _setLoading(true);
     _clearError();
@@ -127,11 +130,19 @@ class TransactionViewModel extends ChangeNotifier {
         nominal: nominal,
         date: date,
         notes: notes,
+        categoryId: categoryId,
+        categoryName: categoryName,
       );
 
       await loadTransactions();
       await loadUnsyncedCount();
       _setLoading(false);
+
+      // Cek spending limit setelah expense (fire-and-forget)
+      if (category == TransactionCategory.expense) {
+        NotificationService().checkSpendingLimits(userId);
+        NotificationService().checkMonthlyBudgets(userId);
+      }
     } catch (e) {
       _setError(e.toString());
       _setLoading(false);
@@ -149,6 +160,12 @@ class TransactionViewModel extends ChangeNotifier {
       await loadTransactions();
       await loadUnsyncedCount();
       _setLoading(false);
+
+      // Cek spending limit jika expense diupdate (nominal bisa berubah)
+      if (transaction.category == TransactionCategory.expense) {
+        NotificationService().checkSpendingLimits(userId);
+        NotificationService().checkMonthlyBudgets(userId);
+      }
     } catch (e) {
       _setError(e.toString());
       _setLoading(false);
@@ -166,6 +183,11 @@ class TransactionViewModel extends ChangeNotifier {
       await loadTransactions();
       await loadUnsyncedCount();
       _setLoading(false);
+
+      // Cek spending limit jika expense dihapus (spending hari ini berkurang)
+      if (transaction.category == TransactionCategory.expense) {
+        NotificationService().checkSpendingLimits(userId);
+      }
     } catch (e) {
       _setError(e.toString());
       _setLoading(false);

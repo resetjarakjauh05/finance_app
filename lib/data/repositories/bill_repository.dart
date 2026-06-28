@@ -30,10 +30,15 @@ class BillRepository {
     required DateTime dueDate,
     BillType type = BillType.hutang,
     String? category,
+    String? categoryId,
+    String? categoryName,
     String? notes,
   }) async {
     if (name.trim().isEmpty) throw Exception('Nama tagihan tidak boleh kosong');
     if (nominal <= 0) throw Exception('Nominal harus lebih dari 0');
+    if (type == BillType.hutang && categoryId == null) {
+      throw Exception('Kategori wajib dipilih untuk hutang');
+    }
 
     final isOnline = await _isOnline();
     final bill = BillModel(
@@ -46,6 +51,8 @@ class BillRepository {
       status: BillStatus.unpaid,
       type: type,
       category: category?.trim(),
+      categoryId: categoryId,
+      categoryName: categoryName,
       notes: notes?.trim(),
       localCreatedAt: DateTime.now(),
     );
@@ -96,6 +103,8 @@ class BillRepository {
       nominal: payAmount,
       date: DateTime.now(),
       notes: 'Pembayaran tagihan: ${bill.name}',
+      categoryId: bill.categoryId,
+      categoryName: bill.categoryName,
       localCreatedAt: DateTime.now(),
     );
 

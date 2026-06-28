@@ -16,6 +16,63 @@ service cloud.firestore {
       match /preferences/{document=**} {
         allow read, write: if isOwner(userId);
       }
+
+      // Categories
+      match /categories/{categoryId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && request.resource.data.keys().hasAll(['name', 'icon', 'color']);
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      // Spending limits
+      match /spending_limits/{limitId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && request.resource.data.keys().hasAll(['dailyLimit'])
+          && request.resource.data.dailyLimit is number
+          && request.resource.data.dailyLimit > 0;
+        allow update: if isOwner(userId)
+          && request.resource.data.dailyLimit is number
+          && request.resource.data.dailyLimit > 0;
+        allow delete: if isOwner(userId);
+      }
+
+      // Monthly budgets
+      match /monthly_budgets/{budgetId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && request.resource.data.keys().hasAll(['yearMonth', 'categoryId', 'budgetAmount'])
+          && request.resource.data.budgetAmount is number
+          && request.resource.data.budgetAmount > 0;
+        allow update: if isOwner(userId)
+          && request.resource.data.budgetAmount is number
+          && request.resource.data.budgetAmount > 0;
+        allow delete: if isOwner(userId);
+      }
+
+      // Savings plans
+      match /savings_plans/{planId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && request.resource.data.keys().hasAll(['name', 'targetAmount'])
+          && request.resource.data.targetAmount is number
+          && request.resource.data.targetAmount > 0;
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      // Savings allocations
+      match /savings_allocations/{allocId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && request.resource.data.keys().hasAll(['savingsPlanId', 'amount'])
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0;
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
     }
     
     // Transactions — subcollection items

@@ -44,6 +44,9 @@ class TransactionModel with _$TransactionModel {
     required int nominal,
     required DateTime date,
     String? notes,
+    /// ID kategori custom (dari CategoryModel)
+    String? categoryId,
+    String? categoryName,
     @Default(false) bool isSynced,
     DateTime? syncedAt,
     required DateTime localCreatedAt,
@@ -70,6 +73,8 @@ extension TransactionModelExtension on TransactionModel {
       'nominal': nominal,
       'date': date.millisecondsSinceEpoch,
       'notes': notes,
+      'categoryId': categoryId,
+      'categoryName': categoryName,
       'isSynced': isSynced ? 1 : 0,
       'syncedAt': syncedAt?.millisecondsSinceEpoch,
       'localCreatedAt': localCreatedAt.millisecondsSinceEpoch,
@@ -93,6 +98,8 @@ extension TransactionModelExtension on TransactionModel {
       nominal: map['nominal'] as int,
       date: DateTime.fromMillisecondsSinceEpoch(map['date'] as int),
       notes: map['notes'] as String?,
+      categoryId: map['categoryId'] as String?,
+      categoryName: map['categoryName'] as String?,
       isSynced: (map['isSynced'] as int) == 1,
       syncedAt: map['syncedAt'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['syncedAt'] as int)

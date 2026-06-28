@@ -208,10 +208,19 @@ class TransactionService {
       for (final t in transactions) {
         final existing = await _transactionDao.getByFirebaseDocId(t.firebaseDocId ?? '');
         if (existing == null) {
+          // Insert baru
           final localId = await _transactionDao.insert(t.toSqlite());
           if (t.firebaseDocId != null) {
             await _transactionDao.markAsSynced(localId, t.firebaseDocId!);
           }
+        } else {
+          // Update existing agar data terkini
+          final localId = existing['id'] as int;
+          await _transactionDao.update(localId, {
+            ...t.toSqlite(),
+            'id': localId,
+            'isSynced': 1,
+          });
         }
       }
     } catch (e) {
@@ -365,11 +374,55 @@ class TransactionService {
 
   /// Get saldo per payment method
   Future<Map<String, int>> getBalancePerPaymentMethod(String userId) async {
+    final isOnline = await _connectivity.isOnline();
+    if (isOnline) {
+      try {
+        final snap = await _firestore
+            .collection('transactions')
+            .doc(userId)
+            .collection('items')
+            .get();
+        final Map<String, int> balances = {};
+        for (final doc in snap.docs) {
+          final data = doc.data();
+          // Skip deleted
+          if (data['isDeleted'] == true) continue;
+          final id = data['paymentMethodId'] as String? ?? '';
+          if (id.isEmpty) continue;
+          final nominal = (data['nominal'] as num?)?.toInt() ?? 0;
+          final cat = data['category'] as String? ?? '';
+          balances[id] = (balances[id] ?? 0) +
+              (cat == 'income' ? nominal : -nominal);
+        }
+        return balances;
+      } catch (e) {
+        debugPrint('getBalancePerPaymentMethod Firestore error, fallback: $e');
+      }
+    }
     return await _transactionDao.getBalancePerPaymentMethod(userId);
   }
 
-  /// Get total by category
+  /// Get total by category — Firestore-first, fallback SQLite
   Future<int> getTotalByCategory(String userId, String category) async {
+    final isOnline = await _connectivity.isOnline();
+    if (isOnline) {
+      try {
+        final snap = await _firestore
+            .collection('transactions')
+            .doc(userId)
+            .collection('items')
+            .where('category', isEqualTo: category)
+            .get();
+        int total = 0;
+        for (final doc in snap.docs) {
+          if (doc.data()['isDeleted'] == true) continue;
+          total += (doc.data()['nominal'] as num?)?.toInt() ?? 0;
+        }
+        return total;
+      } catch (e) {
+        debugPrint('getTotalByCategory Firestore error, fallback SQLite: $e');
+      }
+    }
     return await _transactionDao.getTotalByCategory(userId, category);
   }
 
@@ -397,6 +450,8 @@ class TransactionService {
       'nominal': transaction.nominal,
       'date': Timestamp.fromDate(transaction.date),
       'notes': transaction.notes,
+      'categoryId': transaction.categoryId,
+      'categoryName': transaction.categoryName,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -417,6 +472,8 @@ class TransactionService {
       'nominal': transaction.nominal,
       'date': Timestamp.fromDate(transaction.date),
       'notes': transaction.notes,
+      'categoryId': transaction.categoryId,
+      'categoryName': transaction.categoryName,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

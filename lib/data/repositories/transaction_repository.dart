@@ -29,24 +29,26 @@ class TransactionRepository {
     required int nominal,
     required DateTime date,
     String? notes,
+    String? categoryId,
+    String? categoryName,
   }) async {
-    // Validasi
     if (description.trim().isEmpty) {
       throw Exception('Keterangan tidak boleh kosong');
     }
-
     if (nominal <= 0) {
       throw Exception('Nominal harus lebih dari 0');
     }
-
     if (paymentMethodId.trim().isEmpty) {
       throw Exception('Metode pembayaran harus dipilih');
+    }
+    if (category == TransactionCategory.expense && categoryId == null) {
+      throw Exception('Kategori pengeluaran harus dipilih');
     }
 
     final isOnline = await _isOnline();
 
     final transaction = TransactionModel(
-      id: 0, // Will be assigned by SQLite
+      id: 0,
       userId: userId,
       description: description.trim(),
       category: category,
@@ -55,12 +57,12 @@ class TransactionRepository {
       nominal: nominal,
       date: date,
       notes: notes?.trim(),
+      categoryId: categoryId,
+      categoryName: categoryName,
       localCreatedAt: DateTime.now(),
     );
 
     final localId = await _service.createTransaction(transaction, isOnline);
-
-    // Return with local ID
     return transaction.copyWith(id: localId);
   }
 
@@ -168,6 +170,12 @@ class TransactionRepository {
     return await _service.getBalancePerPaymentMethod(userId);
   }
 
+  /// Get saldo untuk satu payment method
+  Future<int> getBalanceForPaymentMethod(String userId, String paymentMethodId) async {
+    final balances = await _service.getBalancePerPaymentMethod(userId);
+    return balances[paymentMethodId] ?? 0;
+  }
+
   /// Initial sync Firestore → SQLite (fresh install / first login)
   Future<void> initialSyncFromFirestore(String userId) async {
     await _service.initialSyncFromFirestore(userId);
@@ -245,7 +253,7 @@ class TransactionRepository {
     return results;
   }
 
-  /// Get category breakdown (expense by payment method)
+  /// Get category breakdown (expense by categoryName)
   Future<Map<String, int>> getCategoryBreakdown(
     String userId, {
     DateTime? startDate,
@@ -259,8 +267,9 @@ class TransactionRepository {
     );
     final breakdown = <String, int>{};
     for (final t in transactions) {
-      breakdown[t.paymentMethodName] =
-          (breakdown[t.paymentMethodName] ?? 0) + t.nominal;
+      // Pakai categoryName jika ada, fallback ke paymentMethodName
+      final key = t.categoryName ?? t.paymentMethodName;
+      breakdown[key] = (breakdown[key] ?? 0) + t.nominal;
     }
     return breakdown;
   }

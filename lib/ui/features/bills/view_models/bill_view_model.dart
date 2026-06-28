@@ -47,6 +47,8 @@ class BillViewModel extends ChangeNotifier {
     required DateTime dueDate,
     BillType type = BillType.hutang,
     String? category,
+    String? categoryId,
+    String? categoryName,
     String? notes,
   }) async {
     _setLoading(true);
@@ -59,6 +61,8 @@ class BillViewModel extends ChangeNotifier {
         dueDate: dueDate,
         type: type,
         category: category,
+        categoryId: categoryId,
+        categoryName: categoryName,
         notes: notes,
       );
       _setLoading(false);

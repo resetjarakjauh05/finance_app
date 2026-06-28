@@ -3,23 +3,45 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:intl/intl.dart';
+import 'spending_limit_service.dart';
+import 'monthly_budget_service.dart';
+import '../local/spending_limit_dao.dart';
+import '../local/monthly_budget_dao.dart';
+import '../local/transaction_dao.dart';
+import '../local/database_helper.dart';
+import '../../domain/models/spending_limit_model.dart';
+import '../../domain/models/monthly_budget_model.dart';
 
 class NotificationService {
+  // ─── Singleton ─────────────────────────────────────────────────────────────
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
-  static const _channelId = 'financial_app';
-  static const _channelName = 'Aplikasi Keuangan';
+  bool _initialized = false;
+
+  // ─── Anti-spam throttle: limitId+status → tanggal terakhir notif ──────────
+  // Key: '${limitId}_${status.name}', Value: date string 'yyyy-MM-dd'
+  final Map<String, String> _lastNotifDate = {};
+
+  static const String _channelId = 'financial_app';
+  static const String _channelName = 'Aplikasi Keuangan';
+  static const String _channelLimitId = 'spending_limit';
+  static const String _channelLimitName = 'Limit Pengeluaran';
 
   Future<void> initialize() async {
-    // Request FCM permission
+    if (_initialized) return;
     await _messaging.requestPermission(
       alert: true, badge: true, sound: true,
     );
 
-    // Init local notifications
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -29,21 +51,26 @@ class NotificationService {
       const InitializationSettings(android: androidSettings, iOS: iosSettings),
     );
 
-    // Create Android notification channel
     if (Platform.isAndroid) {
-      await _localNotifications
+      final plugin = _localNotifications
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(
-            const AndroidNotificationChannel(
-              _channelId, _channelName,
-              description: 'Notifikasi tagihan & keuangan',
-              importance: Importance.high,
-            ),
-          );
+              AndroidFlutterLocalNotificationsPlugin>();
+      await plugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _channelId, _channelName,
+          description: 'Notifikasi tagihan & keuangan',
+          importance: Importance.high,
+        ),
+      );
+      await plugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _channelLimitId, _channelLimitName,
+          description: 'Peringatan limit pengeluaran harian',
+          importance: Importance.high,
+        ),
+      );
     }
 
-    // Handle FCM foreground
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       _showLocalNotification(
         title: message.notification?.title ?? 'Aplikasi Keuangan',
@@ -51,10 +78,16 @@ class NotificationService {
       );
     });
 
+    _initialized = true;
     debugPrint('NotificationService initialized');
   }
 
-  /// Save FCM token to Firestore for cloud push
+  /// Pastikan sudah initialized sebelum show notif
+  Future<void> _ensureInitialized() async {
+    if (!_initialized) await initialize();
+  }
+
+  /// Save FCM token to Firestore
   Future<void> saveTokenToFirestore(String userId) async {
     try {
       final token = await _messaging.getToken();
@@ -74,26 +107,62 @@ class NotificationService {
     }
   }
 
-  /// Show local notification
-  Future<void> _showLocalNotification({
-    required String title,
-    required String body,
-    int id = 0,
-  }) async {
-    const androidDetails = AndroidNotificationDetails(
-      _channelId, _channelName,
-      importance: Importance.high,
-      priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
-    );
-    const iosDetails = DarwinNotificationDetails();
-    await _localNotifications.show(
-      id, title, body,
-      const NotificationDetails(android: androidDetails, iOS: iosDetails),
-    );
+  /// Check spending limits → notifikasi lokal jika warning/exceeded
+  /// Anti-spam: max 1x notif per limitId+status per hari
+  Future<void> checkSpendingLimits(String userId) async {
+    await _ensureInitialized();
+    try {
+      final service = SpendingLimitService(
+        dao: SpendingLimitDao(),
+        txDao: TransactionDao(dbHelper: DatabaseHelper()),
+      );
+      final results = await service.checkLimits(userId);
+      final currency = NumberFormat.currency(
+          locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      for (int i = 0; i < results.length; i++) {
+        final r = results[i];
+
+        // Throttle: skip jika sudah notif hari ini dengan status yang sama
+        final throttleKey = '${r.limit.id}_${r.status.name}';
+        if (_lastNotifDate[throttleKey] == today) continue;
+
+        final label = r.limit.categoryName != null
+            ? '${r.limit.categoryIcon ?? ''} ${r.limit.categoryName}'
+            : 'Semua Pengeluaran';
+        final spent = currency.format(r.spent);
+        final limit = currency.format(r.limit.dailyLimit);
+        final pct = (r.spent / r.limit.dailyLimit * 100).round();
+
+        String title;
+        String body;
+
+        if (r.status == SpendingLimitStatus.warning) {
+          title = '⚠️ Hampir Mencapai Limit';
+          body = '$label: $spent dari $limit ($pct%)';
+        } else {
+          title = '🔴 Limit Pengeluaran Terlampaui';
+          body = '$label: $spent melebihi limit $limit';
+        }
+
+        await _showLocalNotification(
+          id: 200 + i,
+          title: title,
+          body: body,
+          channelId: _channelLimitId,
+          channelName: _channelLimitName,
+        );
+
+        // Tandai sudah notif hari ini → anti-spam
+        _lastNotifDate[throttleKey] = today;
+      }
+    } catch (e) {
+      debugPrint('checkSpendingLimits error: $e');
+    }
   }
 
-  /// Check & notify bills due today/tomorrow
+  /// Check tagihan jatuh tempo → notifikasi lokal
   Future<void> checkBillsDue(String userId) async {
     try {
       final now = DateTime.now();
@@ -122,7 +191,8 @@ class NotificationService {
           message = 'Tagihan "${data['name']}" jatuh tempo BESOK';
         } else if (due.isAfter(today) && due.isBefore(in3days)) {
           final daysLeft = due.difference(today).inDays;
-          message = 'Tagihan "${data['name']}" jatuh tempo dalam $daysLeft hari';
+          message =
+              'Tagihan "${data['name']}" jatuh tempo dalam $daysLeft hari';
         }
 
         if (message != null) {
@@ -135,6 +205,85 @@ class NotificationService {
       }
     } catch (e) {
       debugPrint('checkBillsDue error: $e');
+    }
+  }
+
+  Future<void> _showLocalNotification({
+    required String title,
+    required String body,
+    int id = 0,
+    String channelId = _channelId,
+    String channelName = _channelName,
+  }) async {
+    await _ensureInitialized();
+    final androidDetails = AndroidNotificationDetails(
+      channelId, channelName,
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+    const iosDetails = DarwinNotificationDetails();
+    await _localNotifications.show(
+      id,
+      title,
+      body,
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
+    );
+  }
+
+  /// Check anggaran bulanan → notifikasi lokal jika warning/exceeded
+  /// Anti-spam: max 1x notif per budgetId+status per hari
+  Future<void> checkMonthlyBudgets(String userId) async {
+    await _ensureInitialized();
+    try {
+      final service = MonthlyBudgetService(
+        dao: MonthlyBudgetDao(),
+        txDao: TransactionDao(dbHelper: DatabaseHelper()),
+      );
+      final yearMonth = MonthlyBudgetService.formatYearMonth(DateTime.now());
+      final budgets = await service.getBudgetsByMonth(userId, yearMonth);
+      final currency = NumberFormat.currency(
+          locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      for (int i = 0; i < budgets.length; i++) {
+        final b = budgets[i];
+        final actual = await service.getActualSpending(userId, yearMonth, b.categoryId);
+        final status = b.statusForSpent(actual);
+        if (status == BudgetStatus.safe) continue;
+
+        // Throttle: skip jika sudah notif hari ini dengan status yang sama
+        final throttleKey = 'budget_${b.id}_${status.name}';
+        if (_lastNotifDate[throttleKey] == today) continue;
+
+        final label = '${b.categoryIcon} ${b.categoryName}';
+        final spentStr = currency.format(actual);
+        final budgetStr = currency.format(b.budgetAmount);
+        final pct = (actual / b.budgetAmount * 100).round();
+
+        String title;
+        String body;
+
+        if (status == BudgetStatus.warning) {
+          title = '⚠️ Anggaran Hampir Habis';
+          body = '$label: $spentStr dari $budgetStr ($pct%)';
+        } else {
+          title = '🔴 Anggaran Bulanan Terlampaui';
+          body = '$label: $spentStr melebihi anggaran $budgetStr';
+        }
+
+        await _showLocalNotification(
+          id: 300 + i,
+          title: title,
+          body: body,
+          channelId: _channelLimitId,
+          channelName: _channelLimitName,
+        );
+
+        _lastNotifDate[throttleKey] = today;
+      }
+    } catch (e) {
+      debugPrint('checkMonthlyBudgets error: $e');
     }
   }
 

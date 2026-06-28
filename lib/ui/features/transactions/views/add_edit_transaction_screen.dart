@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../data/services/transaction_service.dart';
 import '../../../../data/services/payment_method_service.dart';
+import '../../../../data/services/category_service.dart';
 import '../../../../data/repositories/transaction_repository.dart';
 import '../../../../data/repositories/payment_method_repository.dart';
+import '../../../../data/repositories/category_repository.dart';
+import '../../../../data/local/category_dao.dart';
 import '../view_models/transaction_view_model.dart';
 import '../../../../domain/models/transaction_model.dart';
+import '../../../../domain/models/category_model.dart';
 import '../../../core/dialogs.dart';
 import 'package:intl/intl.dart';
 
@@ -35,6 +39,11 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
   String? _selectedPaymentMethodId;
   DateTime _selectedDate = DateTime.now();
 
+  // Kategori pengeluaran
+  CategoryModel? _selectedExpenseCategory;
+  List<CategoryModel> _expenseCategories = [];
+  bool _loadingCategories = false;
+
   bool get isEditMode => widget.transaction != null;
 
   @override
@@ -50,16 +59,38 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
       userId: widget.userId,
     );
     _viewModel.loadPaymentMethods();
+    _loadExpenseCategories();
 
-    // Load existing data if editing
     if (isEditMode) {
-      final transaction = widget.transaction!;
-      _descriptionController.text = transaction.description;
-      _selectedCategory = transaction.category;
-      _selectedPaymentMethodId = transaction.paymentMethodId;
-      _nominalController.text = transaction.nominal.toString();
-      _selectedDate = transaction.date;
-      _notesController.text = transaction.notes ?? '';
+      final t = widget.transaction!;
+      _descriptionController.text = t.description;
+      _selectedCategory = t.category;
+      _selectedPaymentMethodId = t.paymentMethodId;
+      _nominalController.text = t.nominal.toString();
+      _selectedDate = t.date;
+      _notesController.text = t.notes ?? '';
+    }
+  }
+
+  Future<void> _loadExpenseCategories() async {
+    setState(() => _loadingCategories = true);
+    try {
+      final repo = CategoryRepository(
+        service: CategoryService(dao: CategoryDao()),
+      );
+      final cats = await repo.getCategories(widget.userId);
+      setState(() {
+        _expenseCategories = cats;
+        _loadingCategories = false;
+        // Set existing category saat edit
+        if (isEditMode && widget.transaction!.categoryId != null) {
+          _selectedExpenseCategory = cats
+              .where((c) => c.id == widget.transaction!.categoryId)
+              .firstOrNull;
+        }
+      });
+    } catch (e) {
+      setState(() => _loadingCategories = false);
     }
   }
 
@@ -80,16 +111,23 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
       lastDate: DateTime.now().add(const Duration(days: 365)),
       locale: const Locale('id', 'ID'),
     );
-
-    if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
+    if (picked != null) setState(() => _selectedDate = picked);
   }
 
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Validasi kategori saat expense
+    if (_selectedCategory == TransactionCategory.expense &&
+        _selectedExpenseCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pilih kategori pengeluaran'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     if (_selectedPaymentMethodId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -101,7 +139,8 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
       return;
     }
 
-    final paymentMethod = _viewModel.getPaymentMethod(_selectedPaymentMethodId!);
+    final paymentMethod =
+        _viewModel.getPaymentMethod(_selectedPaymentMethodId!);
     if (paymentMethod == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -110,6 +149,34 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
         ),
       );
       return;
+    }
+
+    // categoryId hanya untuk expense
+    final categoryId = _selectedCategory == TransactionCategory.expense
+        ? _selectedExpenseCategory?.id
+        : null;
+    final categoryName = _selectedCategory == TransactionCategory.expense
+        ? _selectedExpenseCategory?.name
+        : null;
+
+    // Cek saldo saat expense (hanya create, bukan edit)
+    if (!isEditMode &&
+        _selectedCategory == TransactionCategory.expense) {
+      final nominal = int.tryParse(_nominalController.text) ?? 0;
+      final repo = TransactionRepository(service: TransactionService());
+      final saldo = await repo.getBalanceForPaymentMethod(
+          widget.userId, _selectedPaymentMethodId!);
+      if (saldo < nominal) {
+        if (!mounted) return;
+        await showErrorDialog(
+          context,
+          title: 'Saldo Tidak Mencukupi',
+          message:
+              'Saldo ${paymentMethod.name} hanya ${NumberFormat.currency(locale: "id_ID", symbol: "Rp ", decimalDigits: 0).format(saldo)}. '
+              'Tidak cukup untuk pengeluaran ${NumberFormat.currency(locale: "id_ID", symbol: "Rp ", decimalDigits: 0).format(nominal)}.',
+        );
+        return;
+      }
     }
 
     try {
@@ -124,6 +191,8 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
           notes: _notesController.text.trim().isNotEmpty
               ? _notesController.text.trim()
               : null,
+          categoryId: categoryId,
+          categoryName: categoryName,
         );
         await _viewModel.updateTransaction(updatedTransaction);
       } else {
@@ -137,25 +206,19 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
           notes: _notesController.text.trim().isNotEmpty
               ? _notesController.text.trim()
               : null,
+          categoryId: categoryId,
+          categoryName: categoryName,
         );
       }
 
       if (mounted) {
         await showSuccessDialog(
           context,
-          title: isEditMode ? 'Berhasil Diperbarui' : 'Berhasil Disimpan',
           message: isEditMode
-              ? 'Transaksi berhasil diperbarui.'
-              : 'Transaksi berhasil disimpan.',
-          icon: isEditMode ? Icons.edit_note : Icons.check_circle,
+              ? 'Transaksi berhasil diperbarui'
+              : 'Transaksi berhasil disimpan',
         );
-        if (mounted) {
-          Navigator.of(context).pop(
-            isEditMode
-                ? 'Transaksi berhasil diperbarui'
-                : 'Transaksi berhasil disimpan',
-          );
-        }
+        if (mounted) Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
@@ -175,18 +238,16 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          isEditMode ? 'Edit Transaksi' : 'Tambah Transaksi',
-        ),
+        title: Text(isEditMode ? 'Edit Transaksi' : 'Tambah Transaksi'),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Category selector
+            // Tipe transaksi (income/expense)
             Text(
-              'Kategori',
+              'Tipe Transaksi',
               style: Theme.of(context).textTheme.labelLarge,
             ),
             const SizedBox(height: 8),
@@ -207,9 +268,56 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
               onSelectionChanged: (Set<TransactionCategory> selection) {
                 setState(() {
                   _selectedCategory = selection.first;
+                  // Reset kategori expense saat ganti tipe
+                  if (_selectedCategory == TransactionCategory.income) {
+                    _selectedExpenseCategory = null;
+                  }
                 });
               },
             ),
+            const SizedBox(height: 16),
+
+            // Dropdown kategori (wajib expense, opsional income)
+            _loadingCategories
+                ? const Center(child: CircularProgressIndicator())
+                : _expenseCategories.isEmpty
+                    ? OutlinedButton.icon(
+                        onPressed: _loadExpenseCategories,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Muat Kategori'),
+                        style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48)),
+                      )
+                    : DropdownButtonFormField<CategoryModel>(
+                        value: _selectedExpenseCategory,
+                        decoration: InputDecoration(
+                          labelText: _selectedCategory ==
+                                  TransactionCategory.expense
+                              ? 'Kategori Pengeluaran *'
+                              : 'Kategori (opsional)',
+                          prefixIcon: const Icon(Icons.category_outlined),
+                          border: const OutlineInputBorder(),
+                        ),
+                        items: [
+                          if (_selectedCategory == TransactionCategory.income)
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('— Tanpa Kategori —'),
+                            ),
+                          ..._expenseCategories.map((cat) => DropdownMenuItem(
+                                value: cat,
+                                child: Text('${cat.icon} ${cat.name}'),
+                              )),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _selectedExpenseCategory = v),
+                        validator: (v) =>
+                            _selectedCategory ==
+                                        TransactionCategory.expense &&
+                                    v == null
+                                ? 'Pilih kategori pengeluaran'
+                                : null,
+                      ),
             const SizedBox(height: 16),
 
             // Description
@@ -235,10 +343,8 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
             ListenableBuilder(
               listenable: _viewModel,
               builder: (context, _) {
-                final activeMethods = _viewModel.paymentMethods
-                    .where((m) => m.isActive)
-                    .toList();
-
+                final activeMethods =
+                    _viewModel.paymentMethods.where((m) => m.isActive).toList();
                 return DropdownButtonFormField<String>(
                   value: _selectedPaymentMethodId,
                   decoration: const InputDecoration(
@@ -246,17 +352,14 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
                     prefixIcon: Icon(Icons.account_balance_wallet_outlined),
                     border: OutlineInputBorder(),
                   ),
-                  items: activeMethods.map((method) {
-                    return DropdownMenuItem(
-                      value: method.id,
-                      child: Text(method.name),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedPaymentMethodId = value;
-                    });
-                  },
+                  items: activeMethods
+                      .map((method) => DropdownMenuItem(
+                            value: method.id,
+                            child: Text(method.name),
+                          ))
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => _selectedPaymentMethodId = value),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Pilih metode pembayaran';
@@ -272,9 +375,7 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
             TextFormField(
               controller: _nominalController,
               keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-              ],
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: const InputDecoration(
                 labelText: 'Nominal',
                 hintText: '0',

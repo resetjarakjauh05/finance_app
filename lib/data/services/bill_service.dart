@@ -102,6 +102,8 @@ class BillService {
       status: BillStatusExtension.fromString(data['status'] as String? ?? 'UNPAID'),
       type: BillTypeExtension.fromString(data['type'] as String? ?? 'HUTANG'),
       category: data['category'] as String?,
+      categoryId: data['categoryId'] as String?,
+      categoryName: data['categoryName'] as String?,
       notes: data['notes'] as String?,
       isSynced: true,
       syncedAt: DateTime.now(),
@@ -136,6 +138,8 @@ class BillService {
     'status': b.status.name,
     'type': b.type.name,
     'category': b.category,
+    'categoryId': b.categoryId,
+    'categoryName': b.categoryName,
     'notes': b.notes,
     'createdAt': FieldValue.serverTimestamp(),
   };

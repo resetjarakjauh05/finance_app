@@ -3,7 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/services/bill_service.dart';
 import '../../../../data/repositories/bill_repository.dart';
+import '../../../../data/repositories/category_repository.dart';
+import '../../../../data/services/category_service.dart';
+import '../../../../data/local/category_dao.dart';
 import '../../../../domain/models/bill_model.dart';
+import '../../../../domain/models/category_model.dart';
 import '../../../core/dialogs.dart';
 import '../view_models/bill_view_model.dart';
 
@@ -28,6 +32,11 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
   BillType _selectedType = BillType.hutang;
   final _dateFormat = DateFormat('dd MMM yyyy', 'id_ID');
 
+  // Kategori
+  CategoryModel? _selectedCategory;
+  List<CategoryModel> _categories = [];
+  bool _loadingCategories = false;
+
   bool get isEditMode => widget.bill != null;
 
   @override
@@ -44,6 +53,29 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
       _notesController.text = b.notes ?? '';
       _dueDate = b.dueDate;
       _selectedType = b.type;
+    }
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    setState(() => _loadingCategories = true);
+    try {
+      final repo = CategoryRepository(
+        service: CategoryService(dao: CategoryDao()),
+      );
+      final cats = await repo.getCategories(widget.userId);
+      setState(() {
+        _categories = cats;
+        _loadingCategories = false;
+        // Set existing category saat edit
+        if (isEditMode && widget.bill!.categoryId != null) {
+          _selectedCategory = cats
+              .where((c) => c.id == widget.bill!.categoryId)
+              .firstOrNull;
+        }
+      });
+    } catch (e) {
+      setState(() => _loadingCategories = false);
     }
   }
 
@@ -68,12 +100,18 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
   }
 
   Future<void> _handleSave() async {
-    debugPrint('AddEditBillScreen._handleSave called');
-    if (!_formKey.currentState!.validate()) {
-      debugPrint('AddEditBillScreen form validation failed');
+    if (!_formKey.currentState!.validate()) return;
+
+    // Validasi kategori wajib untuk hutang
+    if (_selectedType == BillType.hutang && _selectedCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pilih kategori untuk tagihan hutang'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
-    debugPrint('AddEditBillScreen form valid, type=$_selectedType, nominal=${_nominalController.text}');
 
     try {
       if (isEditMode) {
@@ -82,6 +120,12 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
           nominal: int.parse(_nominalController.text),
           dueDate: _dueDate,
           type: _selectedType,
+          categoryId: _selectedType == BillType.hutang
+              ? _selectedCategory?.id
+              : null,
+          categoryName: _selectedType == BillType.hutang
+              ? _selectedCategory?.name
+              : null,
           notes: _notesController.text.trim().isNotEmpty
               ? _notesController.text.trim()
               : null,
@@ -94,6 +138,12 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
           nominal: int.parse(_nominalController.text),
           dueDate: _dueDate,
           type: _selectedType,
+          categoryId: _selectedType == BillType.hutang
+              ? _selectedCategory?.id
+              : null,
+          categoryName: _selectedType == BillType.hutang
+              ? _selectedCategory?.name
+              : null,
           notes: _notesController.text.trim().isNotEmpty
               ? _notesController.text.trim()
               : null,
@@ -111,15 +161,19 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
         );
         if (mounted) {
           Navigator.of(context).pop(
-            isEditMode ? 'Tagihan berhasil diperbarui' : 'Tagihan berhasil ditambahkan',
+            isEditMode
+                ? 'Tagihan berhasil diperbarui'
+                : 'Tagihan berhasil ditambahkan',
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        await showErrorDialog(context,
-            title: 'Gagal Menyimpan',
-            message: _viewModel.errorMessage ?? e.toString());
+        await showErrorDialog(
+          context,
+          title: 'Gagal Menyimpan',
+          message: _viewModel.errorMessage ?? e.toString(),
+        );
       }
     }
   }
@@ -136,7 +190,7 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: FilledButton(
-              onPressed: _viewModel.isLoading ? null : _handleSave,
+              onPressed: (_viewModel.isLoading || _loadingCategories) ? null : _handleSave,
               style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16)),
               child: _viewModel.isLoading
@@ -159,8 +213,10 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
             // Tipe tagihan (Hutang/Piutang)
             Text(
               'Tipe',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey.shade600),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.grey.shade600),
             ),
             const SizedBox(height: 8),
             SegmentedButton<BillType>(
@@ -177,10 +233,45 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
                 ),
               ],
               selected: {_selectedType},
-              onSelectionChanged: (val) =>
-                  setState(() => _selectedType = val.first),
+              onSelectionChanged: (val) {
+                setState(() {
+                  _selectedType = val.first;
+                  // Reset kategori saat ganti ke piutang
+                  if (_selectedType == BillType.piutang) {
+                    _selectedCategory = null;
+                  }
+                });
+              },
             ),
             const SizedBox(height: 16),
+
+            // Kategori (wajib hutang, opsional piutang)
+            if (_loadingCategories)
+              const Center(child: CircularProgressIndicator())
+            else if (_categories.isNotEmpty) ...[
+              DropdownButtonFormField<CategoryModel>(
+                value: _selectedCategory,
+                decoration: InputDecoration(
+                  labelText: _selectedType == BillType.hutang
+                      ? 'Kategori *'
+                      : 'Kategori (opsional)',
+                  prefixIcon: const Icon(Icons.category_outlined),
+                  border: const OutlineInputBorder(),
+                ),
+                items: _categories
+                    .map((cat) => DropdownMenuItem(
+                          value: cat,
+                          child: Text('${cat.icon} ${cat.name}'),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedCategory = v),
+                validator: (v) =>
+                    _selectedType == BillType.hutang && v == null
+                        ? 'Pilih kategori untuk hutang'
+                        : null,
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // Nama tagihan
             TextFormField(

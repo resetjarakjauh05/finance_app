@@ -99,7 +99,6 @@ class _BillsScreenState extends State<BillsScreen>
   }
 
   Future<void> _handlePay(BillModel bill) async {
-    // Load payment methods dulu
     List<PaymentMethodModel> paymentMethods = [];
     try {
       final all = await PaymentMethodRepository(
@@ -117,75 +116,31 @@ class _BillsScreenState extends State<BillsScreen>
       return;
     }
 
-    final controller = TextEditingController(text: bill.remainingAmount.toString());
-    PaymentMethodModel? selectedMethod = paymentMethods.first;
-
-    final confirmed = await showDialog<bool>(
+    final result = await showDialog<_PayResult>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          title: Text('${bill.type == BillType.hutang ? 'Bayar' : 'Terima'} "${bill.name}"'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Sisa: ${_currencyFormat.format(bill.remainingAmount)}'),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'Nominal',
-                  prefixText: 'Rp ',
-                  border: OutlineInputBorder(),
-                ),
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<PaymentMethodModel>(
-                value: selectedMethod,
-                decoration: const InputDecoration(
-                  labelText: 'Metode Pembayaran',
-                  border: OutlineInputBorder(),
-                ),
-                items: paymentMethods
-                    .map((m) => DropdownMenuItem(value: m, child: Text(m.name)))
-                    .toList(),
-                onChanged: (v) => setStateDialog(() => selectedMethod = v),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Batal'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(bill.type == BillType.hutang ? 'Bayar' : 'Terima'),
-            ),
-          ],
-        ),
+      builder: (context) => _PayDialog(
+        bill: bill,
+        paymentMethods: paymentMethods,
+        currencyFormat: _currencyFormat,
       ),
     );
 
-    if (confirmed == true && selectedMethod != null) {
-      final amount = int.tryParse(controller.text) ?? 0;
-      if (amount <= 0) { controller.dispose(); return; }
+    if (result != null && result.amount > 0 && mounted) {
       try {
-        await _viewModel.payBill(bill, amount, selectedMethod!);
+        await _viewModel.payBill(bill, result.amount, result.method);
         if (mounted) {
           await showSuccessDialog(context,
-              title: bill.type == BillType.hutang ? 'Pembayaran Berhasil' : 'Penerimaan Berhasil',
-              message: '${_currencyFormat.format(amount)} untuk "${bill.name}" telah dicatat sebagai transaksi.',
+              title: bill.type == BillType.hutang
+                  ? 'Pembayaran Berhasil'
+                  : 'Penerimaan Berhasil',
+              message:
+                  '${_currencyFormat.format(result.amount)} untuk "${bill.name}" telah dicatat sebagai transaksi.',
               icon: Icons.check_circle);
         }
       } catch (e) {
         if (mounted) await showErrorDialog(context, message: e.toString());
       }
     }
-    controller.dispose();
   }
 
   @override
@@ -401,6 +356,106 @@ class _BillsScreenState extends State<BillsScreen>
       child: Text(status.displayName,
           style: TextStyle(color: color, fontSize: 12,
               fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+// ─── Pay Dialog ──────────────────────────────────────────────────────────────
+
+class _PayResult {
+  final int amount;
+  final PaymentMethodModel method;
+  const _PayResult({required this.amount, required this.method});
+}
+
+class _PayDialog extends StatefulWidget {
+  final BillModel bill;
+  final List<PaymentMethodModel> paymentMethods;
+  final NumberFormat currencyFormat;
+
+  const _PayDialog({
+    required this.bill,
+    required this.paymentMethods,
+    required this.currencyFormat,
+  });
+
+  @override
+  State<_PayDialog> createState() => _PayDialogState();
+}
+
+class _PayDialogState extends State<_PayDialog> {
+  late final TextEditingController _controller;
+  late PaymentMethodModel _selectedMethod;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+        text: widget.bill.remainingAmount.toString());
+    _selectedMethod = widget.paymentMethods.first;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+          '${widget.bill.type == BillType.hutang ? 'Bayar' : 'Terima'} "${widget.bill.name}"'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Sisa: ${widget.currencyFormat.format(widget.bill.remainingAmount)}'),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _controller,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(
+              labelText: 'Nominal',
+              prefixText: 'Rp ',
+              border: OutlineInputBorder(),
+            ),
+            autofocus: true,
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<PaymentMethodModel>(
+            value: _selectedMethod,
+            decoration: const InputDecoration(
+              labelText: 'Metode Pembayaran',
+              border: OutlineInputBorder(),
+            ),
+            items: widget.paymentMethods
+                .map((m) => DropdownMenuItem(value: m, child: Text(m.name)))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) setState(() => _selectedMethod = v);
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final amount = int.tryParse(_controller.text) ?? 0;
+            if (amount <= 0) return;
+            Navigator.of(context).pop(
+              _PayResult(amount: amount, method: _selectedMethod),
+            );
+          },
+          child: Text(
+              widget.bill.type == BillType.hutang ? 'Bayar' : 'Terima'),
+        ),
+      ],
     );
   }
 }

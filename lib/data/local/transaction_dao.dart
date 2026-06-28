@@ -1,9 +1,13 @@
 import 'package:sqflite/sqflite.dart';
+import '../../domain/models/transaction_model.dart';
 import 'database_helper.dart';
 
 /// Data Access Object untuk transactions table
 class TransactionDao {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final DatabaseHelper _dbHelper;
+
+  TransactionDao({DatabaseHelper? dbHelper})
+      : _dbHelper = dbHelper ?? DatabaseHelper();
 
   /// Insert transaction
   Future<int> insert(Map<String, dynamic> transaction) async {
@@ -203,5 +207,43 @@ class TransactionDao {
       whereArgs: [userId, paymentMethodId],
       limit: 1,
     );
+  }
+
+  /// Filter transactions, return List of TransactionModel (dipakai SpendingLimitService)
+  Future<List<TransactionModel>> filterTransactions(
+    String userId, {
+    String? category,
+    String? categoryId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final db = await _dbHelper.database;
+    final where = <String>['userId = ?', 'isDeleted = 0'];
+    final whereArgs = <dynamic>[userId];
+
+    if (category != null) {
+      where.add('category = ?');
+      whereArgs.add(category);
+    }
+    if (categoryId != null) {
+      where.add('categoryId = ?');
+      whereArgs.add(categoryId);
+    }
+    if (startDate != null) {
+      where.add('date >= ?');
+      whereArgs.add(startDate.millisecondsSinceEpoch);
+    }
+    if (endDate != null) {
+      where.add('date < ?');
+      whereArgs.add(endDate.millisecondsSinceEpoch);
+    }
+
+    final maps = await db.query(
+      'transactions',
+      where: where.join(' AND '),
+      whereArgs: whereArgs,
+      orderBy: 'date DESC',
+    );
+    return maps.map(TransactionModelExtension.fromSqlite).toList();
   }
 }
