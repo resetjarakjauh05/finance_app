@@ -149,21 +149,21 @@ service cloud.firestore {
 ## Development Phases
 
 - [x] Phase 0: Project setup, Firebase config
-- [ ] Phase 1: Authentication (F1)
-- [ ] Phase 2: Payment Methods (F4)
-- [ ] Phase 3: SQLite Setup (F8)
-- [ ] Phase 4: Transaction CRUD (F3)
-- [ ] Phase 5: Sync Engine (F8)
-- [ ] Phase 6: Dashboard (F2)
-- [ ] Phase 7: Bills Tracking (F5)
-- [ ] Phase 8: Custody Tracking (F6)
-- [ ] Phase 9: Reports & Analytics (F7)
-- [ ] Phase 10: Search & Filter (F9)
-- [ ] Phase 11: Settings (F10)
-- [ ] Phase 12: Testing
-- [ ] Phase 13: Data Migration
-- [ ] Phase 14: UI/UX Polish
-- [ ] Phase 15: Alpha/Beta Testing
+- [x] Phase 1: Authentication (F1)
+- [x] Phase 2: Payment Methods (F4)
+- [x] Phase 3: SQLite Setup (F8)
+- [x] Phase 4: Transaction CRUD (F3)
+- [x] Phase 5: Sync Engine (F8)
+- [x] Phase 6: Dashboard (F2)
+- [x] Phase 7: Bills Tracking (F5)
+- [x] Phase 8: Custody Tracking (F6)
+- [x] Phase 9: Reports & Analytics (F7)
+- [x] Phase 10: Search & Filter (F9)
+- [x] Phase 11: Settings (F10)
+- [x] Phase 12: Testing
+- [x] Phase 13: Data Migration
+- [x] Phase 14: UI/UX Polish
+- [x] Phase 15: Alpha/Beta Testing
 - [ ] Phase 16: Production Deployment
 
 ## Testing
