@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // User profile
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      match /preferences/{document=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+    
+    // Transactions — subcollection items
+    match /transactions/{userId}/items/{transactionId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasAll(['description', 'category', 'paymentMethodId', 'nominal', 'date'])
+        && request.resource.data.nominal is number
+        && request.resource.data.nominal > 0;
+      allow update: if isOwner(userId)
+        && request.resource.data.nominal is number
+        && request.resource.data.nominal > 0;
+      allow delete: if isOwner(userId);
+    }
+    
+    // Payment Methods — subcollection methods
+    match /paymentMethods/{userId}/methods/{methodId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasAll(['name', 'type', 'isActive']);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+    
+    // Bills — subcollection items, status lowercase
+    match /bills/{userId}/items/{billId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasAll(['name', 'nominal', 'dueDate', 'status'])
+        && request.resource.data.nominal is number
+        && request.resource.data.nominal > 0
+        && request.resource.data.status in ['UNPAID', 'PARTIAL', 'PAID', 'unpaid', 'partial', 'paid'];
+      allow update: if isOwner(userId)
+        && request.resource.data.nominal is number
+        && request.resource.data.nominal > 0;
+      allow delete: if isOwner(userId);
+    }
+    
+    // Custody — subcollection items + movements
+    match /custody/{userId}/items/{custodyId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && request.resource.data.keys().hasAll(['depositorName', 'totalNominal', 'type'])
+        && request.resource.data.totalNominal is number
+        && request.resource.data.type in ['DITERIMA', 'DIBERIKAN'];
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+
+      match /movements/{movementId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+    
+    // Monthly Snapshots
+    match /monthlySnapshots/{userId}/{yearMonth} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    // Deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

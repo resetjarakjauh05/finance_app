@@ -1,0 +1,466 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import '../../domain/models/transaction_model.dart';
+import '../local/transaction_dao.dart';
+import '../local/pending_operations_dao.dart';
+import '../local/sync_log_dao.dart';
+import 'connectivity_service.dart';
+
+/// Service untuk transaction operations (Firebase-first, SQLite fallback)
+class TransactionService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final TransactionDao _transactionDao = TransactionDao();
+  final PendingOperationsDao _pendingOpsDao = PendingOperationsDao();
+  final SyncLogDao _syncLogDao = SyncLogDao();
+  final ConnectivityService _connectivity = ConnectivityService();
+
+  /// Create transaction (offline-first)
+  Future<int> createTransaction(
+    TransactionModel transaction,
+    bool isOnline,
+  ) async {
+    // 1. Save to SQLite immediately
+    final localId = await _transactionDao.insert(transaction.toSqlite());
+
+    // 2. If online, also save to Firestore
+    if (isOnline) {
+      try {
+        final docRef = await _saveToFirestore(transaction);
+        
+        // Mark as synced
+        await _transactionDao.markAsSynced(localId, docRef.id);
+        
+        // Log success
+        await _syncLogDao.addLog(
+          operation: 'CREATE',
+          entityType: 'TRANSACTION',
+          entityId: localId,
+          firebaseDocId: docRef.id,
+          status: 'SUCCESS',
+        );
+      } catch (e) {
+        // If Firestore fails, queue for later sync
+        await _queueForSync(localId, transaction, 'CREATE');
+        
+        // Log failure
+        await _syncLogDao.addLog(
+          operation: 'CREATE',
+          entityType: 'TRANSACTION',
+          entityId: localId,
+          status: 'FAILED',
+          error: e.toString(),
+        );
+      }
+    } else {
+      // Offline: queue for sync
+      await _queueForSync(localId, transaction, 'CREATE');
+    }
+
+    return localId;
+  }
+
+  /// Update transaction
+  Future<void> updateTransaction(
+    TransactionModel transaction,
+    bool isOnline,
+  ) async {
+    // 1. Update SQLite
+    await _transactionDao.update(
+      transaction.id,
+      transaction.copyWith(updatedAt: DateTime.now()).toSqlite(),
+    );
+
+    // 2. If online and has firebaseDocId, update Firestore
+    if (isOnline && transaction.firebaseDocId != null) {
+      try {
+        await _updateFirestore(transaction);
+        
+        // Mark as synced
+        await _transactionDao.markAsSynced(
+          transaction.id,
+          transaction.firebaseDocId!,
+        );
+        
+        // Log success
+        await _syncLogDao.addLog(
+          operation: 'UPDATE',
+          entityType: 'TRANSACTION',
+          entityId: transaction.id,
+          firebaseDocId: transaction.firebaseDocId,
+          status: 'SUCCESS',
+        );
+      } catch (e) {
+        // Queue for sync
+        await _queueForSync(transaction.id, transaction, 'UPDATE');
+        
+        // Log failure
+        await _syncLogDao.addLog(
+          operation: 'UPDATE',
+          entityType: 'TRANSACTION',
+          entityId: transaction.id,
+          firebaseDocId: transaction.firebaseDocId,
+          status: 'FAILED',
+          error: e.toString(),
+        );
+      }
+    } else {
+      // Queue for sync
+      await _queueForSync(transaction.id, transaction, 'UPDATE');
+    }
+  }
+
+  /// Delete transaction (soft delete)
+  Future<void> deleteTransaction(
+    int id,
+    String userId,
+    String? firebaseDocId,
+    bool isOnline,
+  ) async {
+    // 1. Soft delete in SQLite
+    await _transactionDao.delete(id);
+
+    // 2. If online and has firebaseDocId, delete from Firestore
+    if (isOnline && firebaseDocId != null) {
+      try {
+        await _deleteFromFirestore(userId, firebaseDocId);
+        
+        // Log success
+        await _syncLogDao.addLog(
+          operation: 'DELETE',
+          entityType: 'TRANSACTION',
+          entityId: id,
+          firebaseDocId: firebaseDocId,
+          status: 'SUCCESS',
+        );
+      } catch (e) {
+        // Queue for sync
+        await _pendingOpsDao.addPendingOperation(
+          operation: 'DELETE',
+          tableName: 'transactions',
+          recordId: id,
+          firebaseDocId: firebaseDocId,
+          data: {'id': id},
+        );
+        
+        // Log failure
+        await _syncLogDao.addLog(
+          operation: 'DELETE',
+          entityType: 'TRANSACTION',
+          entityId: id,
+          firebaseDocId: firebaseDocId,
+          status: 'FAILED',
+          error: e.toString(),
+        );
+      }
+    } else {
+      // Queue for sync if has firebaseDocId
+      if (firebaseDocId != null) {
+        await _pendingOpsDao.addPendingOperation(
+          operation: 'DELETE',
+          tableName: 'transactions',
+          recordId: id,
+          firebaseDocId: firebaseDocId,
+          data: {'id': id},
+        );
+      }
+    }
+  }
+
+  /// Get transactions (Firestore-first, SQLite fallback)
+  Future<List<TransactionModel>> getTransactions(
+    String userId, {
+    int? limit,
+    int? offset,
+  }) async {
+    final isOnline = await _connectivity.isOnline();
+    if (isOnline) {
+      try {
+        var query = _firestore
+            .collection('transactions')
+            .doc(userId)
+            .collection('items')
+            .orderBy('date', descending: true);
+        if (limit != null) query = query.limit(limit) as CollectionReference<Map<String, dynamic>>;
+        final snapshot = await query.get();
+        final transactions = <TransactionModel>[];
+        for (final doc in snapshot.docs) {
+          try {
+            transactions.add(_fromFirestore(doc.id, doc.data()));
+          } catch (e) {
+            debugPrint('getTransactions skip ${doc.id}: $e');
+          }
+        }
+        // Cache to SQLite
+        _cacheTransactionsToSqlite(userId, transactions);
+        return transactions;
+      } catch (e) {
+        debugPrint('getTransactions Firestore error, fallback SQLite: $e');
+      }
+    }
+    // Offline fallback: SQLite
+    final results = await _transactionDao.getAllByUserId(userId, limit: limit, offset: offset);
+    return results.map((m) => TransactionModelExtension.fromSqlite(m)).toList();
+  }
+
+  /// Cache Firestore transactions to SQLite
+  Future<void> _cacheTransactionsToSqlite(String userId, List<TransactionModel> transactions) async {
+    try {
+      for (final t in transactions) {
+        final existing = await _transactionDao.getByFirebaseDocId(t.firebaseDocId ?? '');
+        if (existing == null) {
+          final localId = await _transactionDao.insert(t.toSqlite());
+          if (t.firebaseDocId != null) {
+            await _transactionDao.markAsSynced(localId, t.firebaseDocId!);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('_cacheTransactionsToSqlite error: $e');
+    }
+  }
+
+  /// Parse Firestore doc → TransactionModel
+  TransactionModel _fromFirestore(String docId, Map<String, dynamic> data) {
+    return TransactionModel(
+      id: 0,
+      firebaseDocId: docId,
+      userId: data['userId'] as String,
+      description: data['description'] as String,
+      category: TransactionCategory.values.firstWhere(
+        (e) => e.name == data['category'],
+      ),
+      paymentMethodId: data['paymentMethodId'] as String,
+      paymentMethodName: data['paymentMethodName'] as String,
+      nominal: (data['nominal'] as num).toInt(),
+      date: (data['date'] as Timestamp).toDate(),
+      notes: data['notes'] as String?,
+      isSynced: true,
+      syncedAt: DateTime.now(),
+      localCreatedAt: data['createdAt'] != null
+          ? (data['createdAt'] as Timestamp).toDate()
+          : DateTime.now(),
+    );
+  }
+
+  /// Get transaction by ID
+  Future<TransactionModel?> getTransactionById(int id) async {
+    final result = await _transactionDao.getById(id);
+    if (result == null) return null;
+    return TransactionModelExtension.fromSqlite(result);
+  }
+
+  /// Search transactions (Firestore-first via local cache, SQLite search)
+  Future<List<TransactionModel>> searchTransactions(
+    String userId,
+    String query,
+  ) async {
+    // Ensure cache up to date
+    final isOnline = await _connectivity.isOnline();
+    if (isOnline) {
+      try {
+        final snapshot = await _firestore
+            .collection('transactions')
+            .doc(userId)
+            .collection('items')
+            .get();
+        final transactions = snapshot.docs
+            .map((d) {
+              try { return _fromFirestore(d.id, d.data()); } catch (_) { return null; }
+            })
+            .whereType<TransactionModel>()
+            .toList();
+        _cacheTransactionsToSqlite(userId, transactions);
+      } catch (_) {}
+    }
+    // Search in SQLite
+    final results = await _transactionDao.search(userId, query);
+    return results.map((m) => TransactionModelExtension.fromSqlite(m)).toList();
+  }
+
+  /// Filter transactions (Firestore-first via local cache, SQLite filter)
+  Future<List<TransactionModel>> filterTransactions(
+    String userId, {
+    String? category,
+    String? paymentMethodId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    // Ensure cache up to date
+    final isOnline = await _connectivity.isOnline();
+    if (isOnline) {
+      try {
+        final snapshot = await _firestore
+            .collection('transactions')
+            .doc(userId)
+            .collection('items')
+            .get();
+        final transactions = snapshot.docs
+            .map((d) {
+              try { return _fromFirestore(d.id, d.data()); } catch (_) { return null; }
+            })
+            .whereType<TransactionModel>()
+            .toList();
+        _cacheTransactionsToSqlite(userId, transactions);
+      } catch (_) {}
+    }
+    // Filter in SQLite
+    final results = await _transactionDao.filter(
+      userId,
+      category: category,
+      paymentMethodId: paymentMethodId,
+      startDate: startDate?.millisecondsSinceEpoch,
+      endDate: endDate?.millisecondsSinceEpoch,
+    );
+    return results.map((m) => TransactionModelExtension.fromSqlite(m)).toList();
+  }
+
+  /// Initial sync: Firestore → SQLite (saat login pertama / fresh install)
+  Future<void> initialSyncFromFirestore(String userId) async {
+    try {
+      // Cek apakah SQLite sudah ada data
+      final localCount = await _transactionDao.getAllByUserId(userId);
+      if (localCount.isNotEmpty) return; // Sudah ada data lokal, skip
+
+      // Fetch dari Firestore
+      final snapshot = await _firestore
+          .collection('transactions')
+          .doc(userId)
+          .collection('items')
+          .orderBy('date', descending: true)
+          .get();
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        try {
+          final transaction = TransactionModel(
+            id: 0,
+            firebaseDocId: doc.id,
+            userId: userId,
+            description: data['description'] as String,
+            category: TransactionCategory.values.firstWhere(
+              (e) => e.name == data['category'],
+            ),
+            paymentMethodId: data['paymentMethodId'] as String,
+            paymentMethodName: data['paymentMethodName'] as String,
+            nominal: (data['nominal'] as num).toInt(),
+            date: (data['date'] as Timestamp).toDate(),
+            notes: data['notes'] as String?,
+            isSynced: true,
+            syncedAt: DateTime.now(),
+            localCreatedAt: data['createdAt'] != null
+                ? (data['createdAt'] as Timestamp).toDate()
+                : DateTime.now(),
+          );
+          final localId = await _transactionDao.insert(transaction.toSqlite());
+          await _transactionDao.markAsSynced(localId, doc.id);
+        } catch (e) {
+          debugPrint('initialSync skip doc ${doc.id}: $e');
+        }
+      }
+      debugPrint('initialSync done: ${snapshot.docs.length} transactions');
+    } catch (e) {
+      debugPrint('initialSyncFromFirestore error: $e');
+    }
+  }
+
+  /// Get saldo per payment method
+  Future<Map<String, int>> getBalancePerPaymentMethod(String userId) async {
+    return await _transactionDao.getBalancePerPaymentMethod(userId);
+  }
+
+  /// Get total by category
+  Future<int> getTotalByCategory(String userId, String category) async {
+    return await _transactionDao.getTotalByCategory(userId, category);
+  }
+
+  /// Get unsynced transactions count
+  Future<int> getUnsyncedCount(String userId) async {
+    final unsynced = await _transactionDao.getUnsyncedByUserId(userId);
+    return unsynced.length;
+  }
+
+  // ===== Private Helper Methods =====
+
+  /// Save to Firestore
+  Future<DocumentReference> _saveToFirestore(
+    TransactionModel transaction,
+  ) async {
+    return await _firestore
+        .collection('transactions')
+        .doc(transaction.userId)
+        .collection('items')
+        .add({
+      'description': transaction.description,
+      'category': transaction.category.name,
+      'paymentMethodId': transaction.paymentMethodId,
+      'paymentMethodName': transaction.paymentMethodName,
+      'nominal': transaction.nominal,
+      'date': Timestamp.fromDate(transaction.date),
+      'notes': transaction.notes,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Update Firestore
+  Future<void> _updateFirestore(TransactionModel transaction) async {
+    await _firestore
+        .collection('transactions')
+        .doc(transaction.userId)
+        .collection('items')
+        .doc(transaction.firebaseDocId)
+        .update({
+      'description': transaction.description,
+      'category': transaction.category.name,
+      'paymentMethodId': transaction.paymentMethodId,
+      'paymentMethodName': transaction.paymentMethodName,
+      'nominal': transaction.nominal,
+      'date': Timestamp.fromDate(transaction.date),
+      'notes': transaction.notes,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Delete from Firestore
+  Future<void> _deleteFromFirestore(
+    String userId,
+    String firebaseDocId,
+  ) async {
+    await _firestore
+        .collection('transactions')
+        .doc(userId)
+        .collection('items')
+        .doc(firebaseDocId)
+        .delete();
+  }
+
+  /// Queue operation for later sync
+  Future<void> _queueForSync(
+    int localId,
+    TransactionModel transaction,
+    String operation,
+  ) async {
+    await _pendingOpsDao.addPendingOperation(
+      operation: operation,
+      tableName: 'transactions',
+      recordId: localId,
+      firebaseDocId: transaction.firebaseDocId,
+      data: {
+        'id': transaction.id,
+        'userId': transaction.userId,
+        'description': transaction.description,
+        'category': transaction.category.name,
+        'paymentMethodId': transaction.paymentMethodId,
+        'paymentMethodName': transaction.paymentMethodName,
+        'nominal': transaction.nominal,
+        'date': transaction.date.millisecondsSinceEpoch,
+        'notes': transaction.notes,
+        'firebaseDocId': transaction.firebaseDocId,
+        'isSynced': transaction.isSynced,
+        'localCreatedAt': transaction.localCreatedAt.millisecondsSinceEpoch,
+        'updatedAt': transaction.updatedAt?.millisecondsSinceEpoch,
+        'isDeleted': transaction.isDeleted,
+      },
+    );
+  }
+}

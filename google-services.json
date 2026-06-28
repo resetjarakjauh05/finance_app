@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "627484963898",
+    "project_id": "keuangan-a80e6",
+    "storage_bucket": "keuangan-a80e6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:627484963898:android:f15108386f20451b8c3103",
+        "android_client_info": {
+          "package_name": "com.keuangan.financial_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAlv3wDGomRepIVIAR4B0iQiSTkJuwCvHU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

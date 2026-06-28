@@ -1,0 +1,65 @@
+{
+  "@@locale": "id",
+  "appTitle": "Aplikasi Keuangan",
+  "@appTitle": {
+    "description": "Judul aplikasi"
+  },
+  
+  "home": "Beranda",
+  "transactions": "Transaksi",
+  "bills": "Tagihan",
+  "more": "Lainnya",
+  
+  "description": "Keterangan",
+  "category": "Kategori",
+  "paymentMethod": "Metode Pembayaran",
+  "nominal": "Nominal",
+  "date": "Tanggal",
+  "notes": "Catatan",
+  
+  "save": "Simpan",
+  "cancel": "Batal",
+  "delete": "Hapus",
+  "edit": "Edit",
+  "add": "Tambah",
+  
+  "incomeCategory": "Uang Masuk",
+  "expenseCategory": "Uang Keluar",
+  
+  "billStatusUnpaid": "Belum Bayar",
+  "billStatusPartial": "Sebagian",
+  "billStatusPaid": "Lunas",
+  
+  "syncStatusSyncing": "Menyinkron...",
+  "syncStatusSynced": "Tersinkron ✓",
+  "syncStatusFailed": "Gagal Sinkron ✗",
+  "syncStatusOffline": "Offline",
+  
+  "offlineModeMessage": "Mode Offline — Perubahan akan disinkronkan saat online",
+  
+  "deleteConfirmation": "Yakin ingin menghapus data ini?",
+  "yes": "Ya",
+  "no": "Tidak",
+  
+  "transactionSaved": "Transaksi berhasil disimpan",
+  "dataDeleted": "Data berhasil dihapus",
+  
+  "validationNominalRequired": "Nominal harus lebih dari 0",
+  "validationDescriptionRequired": "Keterangan wajib diisi",
+  
+  "income": "Pemasukan",
+  "expense": "Pengeluaran",
+  "balance": "Selisih",
+  "thisMonth": "Bulan Ini",
+  "thisYear": "Tahun Ini",
+  
+  "custodyReceived": "Uang Diterima",
+  "custodyGiven": "Uang Diberikan",
+  "currentBalance": "Saldo Saat Ini",
+  "addMovement": "Tambah Pergerakan",
+  
+  "searchTransactions": "Cari transaksi...",
+  "noTransactions": "Belum ada transaksi",
+  "noBills": "Belum ada tagihan",
+  "noCustody": "Belum ada titipan"
+}
