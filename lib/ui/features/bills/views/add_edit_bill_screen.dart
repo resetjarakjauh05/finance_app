@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import '../../../core/currency_input_formatter.dart';
 import '../../../../data/services/bill_service.dart';
 import '../../../../data/repositories/bill_repository.dart';
 import '../../../../data/repositories/category_repository.dart';
@@ -49,7 +50,7 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
     if (isEditMode) {
       final b = widget.bill!;
       _nameController.text = b.name;
-      _nominalController.text = b.nominal.toString();
+      _nominalController.text = ThousandsSeparatorInputFormatter.formatWithDots(b.nominal.toString());
       _notesController.text = b.notes ?? '';
       _dueDate = b.dueDate;
       _selectedType = b.type;
@@ -117,7 +118,7 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
       if (isEditMode) {
         final updated = widget.bill!.copyWith(
           name: _nameController.text.trim(),
-          nominal: int.parse(_nominalController.text),
+          nominal: ThousandsSeparatorInputFormatter.parseValue(_nominalController.text),
           dueDate: _dueDate,
           type: _selectedType,
           categoryId: _selectedType == BillType.hutang
@@ -135,7 +136,7 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
       } else {
         await _viewModel.createBill(
           name: _nameController.text.trim(),
-          nominal: int.parse(_nominalController.text),
+          nominal: ThousandsSeparatorInputFormatter.parseValue(_nominalController.text),
           dueDate: _dueDate,
           type: _selectedType,
           categoryId: _selectedType == BillType.hutang
@@ -292,7 +293,7 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
             TextFormField(
               controller: _nominalController,
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Total Nominal',
                 prefixText: 'Rp ',
@@ -301,9 +302,8 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
               ),
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Nominal tidak boleh kosong';
-                if (int.tryParse(v) == null || int.parse(v) <= 0) {
-                  return 'Nominal harus lebih dari 0';
-                }
+                final val = ThousandsSeparatorInputFormatter.parseValue(v);
+                if (val <= 0) return 'Nominal harus lebih dari 0';
                 return null;
               },
             ),

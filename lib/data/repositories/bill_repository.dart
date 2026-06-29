@@ -93,6 +93,15 @@ class BillRepository {
         ? TransactionCategory.expense
         : TransactionCategory.income;
 
+    // BUG-05 FIX: piutang = income, tidak butuh categoryId (validasi hanya untuk expense)
+    // categoryId hanya wajib untuk expense di TransactionRepository.createTransaction
+    final txCategoryId = category == TransactionCategory.expense
+        ? (bill.categoryId ?? 'uncategorized') // hutang pasti punya categoryId (validasi di createBill)
+        : null; // piutang = income, tidak perlu categoryId
+    final txCategoryName = category == TransactionCategory.expense
+        ? (bill.categoryName ?? 'Lainnya')
+        : null;
+
     final transaction = TransactionModel(
       id: 0,
       userId: bill.userId,
@@ -103,8 +112,8 @@ class BillRepository {
       nominal: payAmount,
       date: DateTime.now(),
       notes: 'Pembayaran tagihan: ${bill.name}',
-      categoryId: bill.categoryId,
-      categoryName: bill.categoryName,
+      categoryId: txCategoryId,
+      categoryName: txCategoryName,
       localCreatedAt: DateTime.now(),
     );
 

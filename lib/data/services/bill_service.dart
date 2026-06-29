@@ -2,12 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../../domain/models/bill_model.dart';
 import '../local/bill_dao.dart';
+import '../local/pending_operations_dao.dart';
 import 'connectivity_service.dart';
 
 class BillService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final BillDao _billDao = BillDao();
   final ConnectivityService _connectivity = ConnectivityService();
+  final PendingOperationsDao _pendingOpsDao = PendingOperationsDao();
 
   CollectionReference _col(String userId) => _firestore
       .collection('bills')
@@ -22,13 +24,21 @@ class BillService {
       debugPrint('BillService.createBill SQLite OK localId=$localId');
       if (isOnline) {
         try {
-          final docRef = await _col(bill.userId).add(_toFirestore(bill));
+          final docRef = await _col(bill.userId).add(_toFirestoreCreate(bill));
           await _billDao.markAsSynced(localId, docRef.id);
           debugPrint('BillService.createBill Firestore OK docId=${docRef.id}');
+          return localId;
         } catch (e) {
           debugPrint('BillService.createBill Firestore ERROR: $e');
         }
       }
+      // Queue untuk sync saat online
+      await _pendingOpsDao.addPendingOperation(
+        operation: 'CREATE',
+        tableName: 'bills',
+        recordId: localId,
+        data: _toQueueData(bill),
+      );
       return localId;
     } catch (e) {
       debugPrint('BillService.createBill SQLite ERROR: $e');
@@ -45,10 +55,19 @@ class BillService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
         await _billDao.markAsSynced(bill.id, bill.firebaseDocId!);
+        return;
       } catch (e) {
         debugPrint('BillService.updateBill Firestore error: $e');
       }
     }
+    // Queue untuk sync saat online
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'UPDATE',
+      tableName: 'bills',
+      recordId: bill.id,
+      firebaseDocId: bill.firebaseDocId,
+      data: _toQueueData(bill),
+    );
   }
 
   Future<void> deleteBill(int id, String userId, String? firebaseDocId, bool isOnline) async {
@@ -56,7 +75,17 @@ class BillService {
     if (isOnline && firebaseDocId != null) {
       try {
         await _col(userId).doc(firebaseDocId).delete();
+        return;
       } catch (_) {}
+    }
+    if (firebaseDocId != null) {
+      await _pendingOpsDao.addPendingOperation(
+        operation: 'DELETE',
+        tableName: 'bills',
+        recordId: id,
+        firebaseDocId: firebaseDocId,
+        data: {'userId': userId},
+      );
     }
   }
 
@@ -120,7 +149,13 @@ class BillService {
         if (b.firebaseDocId == null) continue;
         final existing = await _billDao.getByFirebaseDocId(b.firebaseDocId!);
         if (existing == null) {
+          // BUG-06 FIX: insert baru
           final localId = await _billDao.insert(b.toSqlite());
+          await _billDao.markAsSynced(localId, b.firebaseDocId!);
+        } else {
+          // BUG-06 FIX: update existing agar tidak stale (data dari device lain)
+          final localId = existing['id'] as int;
+          await _billDao.update(localId, b.copyWith(id: localId).toSqlite());
           await _billDao.markAsSynced(localId, b.firebaseDocId!);
         }
       }
@@ -141,6 +176,27 @@ class BillService {
     'categoryId': b.categoryId,
     'categoryName': b.categoryName,
     'notes': b.notes,
+  };
+
+  /// Khusus untuk create — include createdAt via serverTimestamp
+  Map<String, dynamic> _toFirestoreCreate(BillModel b) => {
+    ..._toFirestore(b),
     'createdAt': FieldValue.serverTimestamp(),
+  };
+
+  /// Untuk pending_operations queue — tanpa Timestamp/FieldValue (JSON-safe)
+  Map<String, dynamic> _toQueueData(BillModel b) => {
+    'userId': b.userId,
+    'name': b.name,
+    'nominal': b.nominal,
+    'paidAmount': b.paidAmount,
+    'dueDate': b.dueDate.toIso8601String(),
+    'status': b.status.name,
+    'type': b.type.name,
+    'category': b.category,
+    'categoryId': b.categoryId,
+    'categoryName': b.categoryName,
+    'notes': b.notes,
+    'createdAt': DateTime.now().toIso8601String(),
   };
 }

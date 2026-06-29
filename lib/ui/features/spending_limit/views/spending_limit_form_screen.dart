@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../core/currency_input_formatter.dart';
 import '../../../../domain/models/spending_limit_model.dart';
 import '../../../../domain/models/category_model.dart';
 import '../../../../data/repositories/category_repository.dart';
@@ -41,7 +42,7 @@ class _SpendingLimitFormScreenState extends State<SpendingLimitFormScreen> {
   void initState() {
     super.initState();
     if (_isEdit) {
-      _limitController.text = widget.existing!.dailyLimit.toString();
+      _limitController.text = ThousandsSeparatorInputFormatter.formatWithDots(widget.existing!.dailyLimit.round().toString());
       _warningThreshold = widget.existing!.warningThreshold;
     }
     _loadCategories();
@@ -98,17 +99,18 @@ class _SpendingLimitFormScreenState extends State<SpendingLimitFormScreen> {
               controller: _limitController,
               decoration: const InputDecoration(
                 labelText: 'Limit Harian (Rp)',
-                hintText: 'cth: 100000',
+                hintText: 'cth: 100.000',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.price_change_outlined),
+                prefixText: 'Rp ',
               ),
               keyboardType: const TextInputType.numberWithOptions(decimal: false),
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
               enableInteractiveSelection: true,
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Nominal tidak boleh kosong';
-                final cleaned = v.replaceAll(RegExp(r'[^0-9]'), '');
-                final val = int.tryParse(cleaned);
-                if (val == null || val <= 0) return 'Nominal harus lebih dari 0';
+                final val = ThousandsSeparatorInputFormatter.parseValue(v);
+                if (val <= 0) return 'Nominal harus lebih dari 0';
                 return null;
               },
               onChanged: (_) => setState(() {}),

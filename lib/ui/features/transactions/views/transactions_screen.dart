@@ -88,7 +88,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   void _navigateToAddEdit({TransactionModel? transaction}) async {
-    final result = await Navigator.of(context).push<String>(
+    // BUG FIX: push<bool> bukan <String> — AddEditTransactionScreen pop(true)
+    final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (context) => AddEditTransactionScreen(
           userId: widget.userId,
@@ -96,12 +97,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         ),
       ),
     );
-    if (result != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result), backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2)),
-      );
+    if (result == true && mounted) {
       _handleRefresh();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(transaction == null
+              ? 'Transaksi berhasil disimpan'
+              : 'Transaksi berhasil diperbarui'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -122,6 +128,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       ),
     );
     if (result != null && mounted) {
+      setState(() => _activeQuickFilter = '');
       await _viewModel.applyFilters(
         category: result['category'],
         paymentMethodId: result['paymentMethodId'],
@@ -286,7 +293,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     const SizedBox(width: 8),
                     _quickFilterChip('Hari Ini',
                         DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
-                        DateTime.now()),
+                        DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59)),
                     const SizedBox(width: 8),
                     _quickFilterChip('Minggu Ini',
                         DateTime.now().subtract(const Duration(days: 7)),

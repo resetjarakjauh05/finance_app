@@ -142,19 +142,44 @@ class TransactionRepository {
     );
   }
 
-  /// Get total income untuk user
-  Future<int> getTotalIncome(String userId) async {
-    return await _service.getTotalByCategory(
+  /// Get total income untuk user dengan date filter opsional
+  Future<int> getTotalIncome(String userId, {DateTime? startDate, DateTime? endDate}) async {
+    if (startDate == null && endDate == null) {
+      return await _service.getTotalByCategory(userId, TransactionCategory.income.name);
+    }
+    final txs = await _service.filterTransactions(
       userId,
-      TransactionCategory.income.name,
+      category: TransactionCategory.income.name,
+      startDate: startDate,
+      endDate: endDate,
     );
+    return txs.fold<int>(0, (s, t) => s + t.nominal);
   }
 
-  /// Get total expense untuk user
-  Future<int> getTotalExpense(String userId) async {
-    return await _service.getTotalByCategory(
+  /// Get total expense untuk user dengan date filter
+  Future<int> getTotalExpense(String userId, {DateTime? startDate, DateTime? endDate}) async {
+    if (startDate == null && endDate == null) {
+      return await _service.getTotalByCategory(userId, TransactionCategory.expense.name);
+    }
+    final txs = await _service.filterTransactions(
       userId,
-      TransactionCategory.expense.name,
+      category: TransactionCategory.expense.name,
+      startDate: startDate,
+      endDate: endDate,
+    );
+    return txs.fold<int>(0, (s, t) => s + t.nominal);
+  }
+
+  /// Get transactions dalam date range — untuk export CSV terfilter
+  Future<List<TransactionModel>> getTransactionsByDateRange(
+    String userId, {
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    return await _service.filterTransactions(
+      userId,
+      startDate: startDate,
+      endDate: endDate,
     );
   }
 

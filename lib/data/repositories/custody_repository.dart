@@ -112,11 +112,10 @@ class CustodyRepository {
     );
     await _transactionService.createTransaction(transaction, isOnline);
 
-    // Calculate balance dari movements list (Firestore-first, tidak bergantung local id)
-    final allMovements = await _service.getMovements(
-        custody.id, custody.userId, custody.firebaseDocId);
-    final newBalance = allMovements.fold<int>(0, (sum, m) =>
-        m.movementType == MovementType.masuk ? sum + m.nominal : sum - m.nominal);
+    // BUG-07 FIX: hitung balance dari movement yang sudah ada + movement baru
+    // Tidak perlu fetch ulang dari Firestore (race condition) — cukup increment/decrement
+    final delta = movementType == MovementType.masuk ? nominal : -nominal;
+    final newBalance = custody.currentBalance + delta;
 
     await _service.updateCustody(
         custody.copyWith(currentBalance: newBalance, updatedAt: DateTime.now()),

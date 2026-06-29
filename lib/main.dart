@@ -28,15 +28,16 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Start sync engine
-  syncEngine.start();
+  // BUG-01 FIX: DB must be ready before SyncEngine starts
+  // (SyncEngine.start() queries pending_operations immediately)
+  await DatabaseHelper().database;
 
-  // Heavy init async after app starts (non-blocking)
-  Future.microtask(() async {
-    await DatabaseHelper().database;
-    NotificationService().initialize().catchError((e) {
-      debugPrint('FCM init error: $e');
-    });
+  // Start sync engine after DB is ready
+  await syncEngine.start();
+
+  // Non-critical init in background (non-blocking)
+  NotificationService().initialize().catchError((e) {
+    debugPrint('FCM init error: $e');
   });
 
   runApp(

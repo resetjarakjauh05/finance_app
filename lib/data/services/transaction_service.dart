@@ -175,20 +175,17 @@ class TransactionService {
     final isOnline = await _connectivity.isOnline();
     if (isOnline) {
       try {
-        var query = _firestore
+        Query<Map<String, dynamic>> query = _firestore
             .collection('transactions')
             .doc(userId)
             .collection('items')
             .orderBy('date', descending: true);
-        if (limit != null) query = query.limit(limit) as CollectionReference<Map<String, dynamic>>;
+        if (limit != null) query = query.limit(limit);
         final snapshot = await query.get();
         final transactions = <TransactionModel>[];
         for (final doc in snapshot.docs) {
-          try {
-            transactions.add(_fromFirestore(doc.id, doc.data()));
-          } catch (e) {
-            debugPrint('getTransactions skip ${doc.id}: $e');
-          }
+          final t = _fromFirestore(doc.id, doc.data(), fallbackUserId: userId);
+          if (t != null) transactions.add(t);
         }
         // Cache to SQLite
         _cacheTransactionsToSqlite(userId, transactions);
@@ -229,26 +226,49 @@ class TransactionService {
   }
 
   /// Parse Firestore doc → TransactionModel
-  TransactionModel _fromFirestore(String docId, Map<String, dynamic> data) {
-    return TransactionModel(
-      id: 0,
-      firebaseDocId: docId,
-      userId: data['userId'] as String,
-      description: data['description'] as String,
-      category: TransactionCategory.values.firstWhere(
-        (e) => e.name == data['category'],
-      ),
-      paymentMethodId: data['paymentMethodId'] as String,
-      paymentMethodName: data['paymentMethodName'] as String,
-      nominal: (data['nominal'] as num).toInt(),
-      date: (data['date'] as Timestamp).toDate(),
-      notes: data['notes'] as String?,
-      isSynced: true,
-      syncedAt: DateTime.now(),
-      localCreatedAt: data['createdAt'] != null
-          ? (data['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
-    );
+  TransactionModel? _fromFirestore(String docId, Map<String, dynamic> data, {String? fallbackUserId}) {
+    try {
+      final userId = (data['userId'] as String?) ?? fallbackUserId;
+      final description = data['description'] as String?;
+      final paymentMethodId = data['paymentMethodId'] as String?;
+      final paymentMethodName = data['paymentMethodName'] as String?;
+      final nominal = data['nominal'];
+      final date = data['date'];
+      final categoryStr = data['category'] as String?;
+
+      if (userId == null || description == null || paymentMethodId == null ||
+          paymentMethodName == null || nominal == null || date == null ||
+          categoryStr == null) {
+        debugPrint('_fromFirestore skip $docId: missing required field');
+        return null;
+      }
+
+      return TransactionModel(
+        id: 0,
+        firebaseDocId: docId,
+        userId: userId,
+        description: description,
+        category: TransactionCategory.values.firstWhere(
+          (e) => e.name == categoryStr,
+          orElse: () => TransactionCategory.expense,
+        ),
+        paymentMethodId: paymentMethodId,
+        paymentMethodName: paymentMethodName,
+        nominal: (nominal as num).toInt(),
+        date: (date as Timestamp).toDate(),
+        notes: data['notes'] as String?,
+        categoryId: data['categoryId'] as String?,
+        categoryName: data['categoryName'] as String?,
+        isSynced: true,
+        syncedAt: DateTime.now(),
+        localCreatedAt: data['createdAt'] != null
+            ? (data['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+      );
+    } catch (e) {
+      debugPrint('_fromFirestore error $docId: $e');
+      return null;
+    }
   }
 
   /// Get transaction by ID
@@ -273,9 +293,7 @@ class TransactionService {
             .collection('items')
             .get();
         final transactions = snapshot.docs
-            .map((d) {
-              try { return _fromFirestore(d.id, d.data()); } catch (_) { return null; }
-            })
+            .map((d) => _fromFirestore(d.id, d.data(), fallbackUserId: userId))
             .whereType<TransactionModel>()
             .toList();
         _cacheTransactionsToSqlite(userId, transactions);
@@ -304,9 +322,7 @@ class TransactionService {
             .collection('items')
             .get();
         final transactions = snapshot.docs
-            .map((d) {
-              try { return _fromFirestore(d.id, d.data()); } catch (_) { return null; }
-            })
+            .map((d) => _fromFirestore(d.id, d.data(), fallbackUserId: userId))
             .whereType<TransactionModel>()
             .toList();
         _cacheTransactionsToSqlite(userId, transactions);
@@ -443,6 +459,7 @@ class TransactionService {
         .doc(transaction.userId)
         .collection('items')
         .add({
+      'userId': transaction.userId,
       'description': transaction.description,
       'category': transaction.category.name,
       'paymentMethodId': transaction.paymentMethodId,
@@ -465,6 +482,7 @@ class TransactionService {
         .collection('items')
         .doc(transaction.firebaseDocId)
         .update({
+      'userId': transaction.userId,
       'description': transaction.description,
       'category': transaction.category.name,
       'paymentMethodId': transaction.paymentMethodId,

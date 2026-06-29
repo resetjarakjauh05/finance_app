@@ -5,6 +5,7 @@ import '../../domain/models/monthly_budget_model.dart';
 import '../local/monthly_budget_dao.dart';
 import '../local/transaction_dao.dart';
 import '../local/database_helper.dart';
+import '../local/pending_operations_dao.dart';
 import '../../domain/models/transaction_model.dart';
 import 'connectivity_service.dart';
 
@@ -13,6 +14,7 @@ class MonthlyBudgetService {
   final MonthlyBudgetDao _dao;
   final TransactionDao _txDao;
   final ConnectivityService _connectivity;
+  final PendingOperationsDao _pendingOpsDao;
   final _uuid = const Uuid();
 
   MonthlyBudgetService({
@@ -20,10 +22,12 @@ class MonthlyBudgetService {
     MonthlyBudgetDao? dao,
     TransactionDao? txDao,
     ConnectivityService? connectivity,
+    PendingOperationsDao? pendingOpsDao,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
         _dao = dao ?? MonthlyBudgetDao(),
         _txDao = txDao ?? TransactionDao(dbHelper: DatabaseHelper()),
-        _connectivity = connectivity ?? ConnectivityService();
+        _connectivity = connectivity ?? ConnectivityService(),
+        _pendingOpsDao = pendingOpsDao ?? PendingOperationsDao();
 
   CollectionReference<Map<String, dynamic>> _col(String userId) =>
       _firestore.collection('users').doc(userId).collection('monthly_budgets');
@@ -74,7 +78,7 @@ class MonthlyBudgetService {
     return _dao.getDistinctMonths(userId);
   }
 
-  /// Create — Firestore-first
+  /// Create — Firestore-first, offline queue fallback
   Future<MonthlyBudgetModel> createBudget({
     required String userId,
     required String yearMonth,
@@ -110,10 +114,17 @@ class MonthlyBudgetService {
       }
     }
     await _dao.insertOrReplace(budget);
+    // Queue untuk sync saat online
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'CREATE',
+      tableName: 'monthly_budgets',
+      recordId: id.hashCode,
+      data: {..._toFirestore(budget), 'userId': userId},
+    );
     return budget;
   }
 
-  /// Update — Firestore-first
+  /// Update — Firestore-first, offline queue fallback
   Future<void> updateBudget(MonthlyBudgetModel budget) async {
     final updated = budget.copyWith(updatedAt: DateTime.now());
     final isOnline = await _connectivity.isOnline();
@@ -128,9 +139,17 @@ class MonthlyBudgetService {
       }
     }
     await _dao.update(updated.copyWith(isSynced: false));
+    // Queue untuk sync saat online
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'UPDATE',
+      tableName: 'monthly_budgets',
+      recordId: budget.id.hashCode,
+      firebaseDocId: budget.firebaseDocId,
+      data: {..._toFirestore(updated), 'userId': budget.userId},
+    );
   }
 
-  /// Delete — Firestore-first
+  /// Delete — Firestore-first, offline queue fallback
   Future<void> deleteBudget(MonthlyBudgetModel budget) async {
     final isOnline = await _connectivity.isOnline();
     if (isOnline && budget.firebaseDocId != null) {
@@ -139,11 +158,21 @@ class MonthlyBudgetService {
           'isDeleted': true,
           'deletedAt': FieldValue.serverTimestamp(),
         });
+        await _dao.softDelete(budget.id);
+        return;
       } catch (e) {
         debugPrint('MonthlyBudgetService.deleteBudget Firestore error: $e');
       }
     }
     await _dao.softDelete(budget.id);
+    // Queue untuk sync saat online
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'DELETE',
+      tableName: 'monthly_budgets',
+      recordId: budget.id.hashCode,
+      firebaseDocId: budget.firebaseDocId,
+      data: {'id': budget.id, 'userId': budget.userId},
+    );
   }
 
   /// Hitung actual spending bulan ini per kategori
@@ -196,7 +225,7 @@ class MonthlyBudgetService {
         'budgetAmount': b.budgetAmount,
         'notes': b.notes,
         'isDeleted': b.isDeleted,
-        'createdAt': FieldValue.serverTimestamp(),
+        'createdAt': b.localCreatedAt.toIso8601String(),
       };
 
   void _cacheToSqlite(List<MonthlyBudgetModel> budgets) async {

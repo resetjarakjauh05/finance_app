@@ -25,6 +25,9 @@ class ConnectivityService {
   void _stopListening() {
     _subscription?.cancel();
     _subscription = null;
+    // BUG-11 FIX: close controller saat semua listener cancel → cegah memory leak
+    _controller?.close();
+    _controller = null;
   }
 
   /// Check current connectivity status

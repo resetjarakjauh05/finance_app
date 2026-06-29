@@ -222,6 +222,23 @@ class DatabaseHelper {
           debugPrint('DB onOpen: added savings_allocations.transferFee');
         }
         debugPrint('DB onOpen: savings_allocations table ensured');
+
+        // Ensure payment_methods SQLite cache table exists
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS payment_methods(
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            bankName TEXT,
+            accountNumber TEXT,
+            isActive INTEGER DEFAULT 1,
+            "order" INTEGER DEFAULT 0,
+            createdAt INTEGER,
+            updatedAt INTEGER
+          )
+        ''');
+        debugPrint('DB onOpen: payment_methods table ensured');
       },
     );
   }
@@ -243,23 +260,146 @@ class DatabaseHelper {
     await _createIndexes(db);
   }
 
-  /// Handle database upgrades
+  /// Handle database upgrades — BUG-02 FIX: additive migrations, no drop
+  /// Data lokal (offline-only, belum sync ke Firestore) aman saat upgrade versi.
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Drop all tables and recreate — safest approach for development
-    await db.execute('DROP TABLE IF EXISTS transactions');
-    await db.execute('DROP TABLE IF EXISTS bills');
-    await db.execute('DROP TABLE IF EXISTS custody');
-    await db.execute('DROP TABLE IF EXISTS custody_movements');
-    await db.execute('DROP TABLE IF EXISTS payment_methods');
-    await db.execute('DROP TABLE IF EXISTS pending_operations');
-    await db.execute('DROP TABLE IF EXISTS sync_log');
-    await db.execute('DROP TABLE IF EXISTS categories');
-    await db.execute('DROP TABLE IF EXISTS spending_limits');
-    await db.execute('DROP TABLE IF EXISTS monthly_budgets');
-    await db.execute('DROP TABLE IF EXISTS savings_plans');
-    await db.execute('DROP TABLE IF EXISTS savings_allocations');
-    await _onCreate(db, newVersion);
-    debugPrint('DatabaseHelper: onUpgrade v$oldVersion→v$newVersion done');
+    debugPrint('DatabaseHelper: onUpgrade v$oldVersion→v$newVersion');
+
+    // v1→v2: tabel awal sudah ada dari onCreate
+    // v2→v3: tambah categoryId/categoryName ke transactions & bills
+    if (oldVersion < 3) {
+      final txCols = await db.rawQuery('PRAGMA table_info(transactions)');
+      final txColNames = txCols.map((c) => c['name'] as String).toSet();
+      if (!txColNames.contains('categoryId')) {
+        await db.execute('ALTER TABLE transactions ADD COLUMN categoryId TEXT');
+      }
+      if (!txColNames.contains('categoryName')) {
+        await db.execute('ALTER TABLE transactions ADD COLUMN categoryName TEXT');
+      }
+
+      final billCols = await db.rawQuery('PRAGMA table_info(bills)');
+      final billColNames = billCols.map((c) => c['name'] as String).toSet();
+      if (!billColNames.contains('type')) {
+        await db.execute("ALTER TABLE bills ADD COLUMN type TEXT NOT NULL DEFAULT 'HUTANG'");
+      }
+      if (!billColNames.contains('isDeleted')) {
+        await db.execute('ALTER TABLE bills ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0');
+      }
+      if (!billColNames.contains('categoryId')) {
+        await db.execute('ALTER TABLE bills ADD COLUMN categoryId TEXT');
+      }
+      if (!billColNames.contains('categoryName')) {
+        await db.execute('ALTER TABLE bills ADD COLUMN categoryName TEXT');
+      }
+    }
+
+    // v3→v4: tambah isDeleted ke custody
+    if (oldVersion < 4) {
+      final custodyCols = await db.rawQuery('PRAGMA table_info(custody)');
+      final custodyColNames = custodyCols.map((c) => c['name'] as String).toSet();
+      if (!custodyColNames.contains('isDeleted')) {
+        await db.execute('ALTER TABLE custody ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0');
+      }
+    }
+
+    // v4→v10: tabel baru (CREATE IF NOT EXISTS aman untuk tabel yang belum ada)
+    if (oldVersion < 10) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS categories(
+          id TEXT PRIMARY KEY,
+          firebaseDocId TEXT,
+          userId TEXT NOT NULL,
+          name TEXT NOT NULL,
+          icon TEXT NOT NULL,
+          color INTEGER NOT NULL,
+          isPreset INTEGER DEFAULT 0,
+          isActive INTEGER DEFAULT 1,
+          isSynced INTEGER DEFAULT 0,
+          syncedAt INTEGER,
+          localCreatedAt INTEGER NOT NULL,
+          updatedAt INTEGER,
+          isDeleted INTEGER DEFAULT 0
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS spending_limits(
+          id TEXT PRIMARY KEY,
+          userId TEXT NOT NULL,
+          categoryId TEXT,
+          categoryName TEXT,
+          categoryIcon TEXT,
+          dailyLimit INTEGER NOT NULL,
+          warningThreshold REAL DEFAULT 0.8,
+          isActive INTEGER DEFAULT 1,
+          firebaseDocId TEXT,
+          isSynced INTEGER DEFAULT 0,
+          syncedAt INTEGER,
+          localCreatedAt INTEGER NOT NULL,
+          updatedAt INTEGER,
+          isDeleted INTEGER DEFAULT 0
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS monthly_budgets(
+          id TEXT PRIMARY KEY,
+          userId TEXT NOT NULL,
+          yearMonth TEXT NOT NULL,
+          categoryId TEXT NOT NULL,
+          categoryName TEXT NOT NULL,
+          categoryIcon TEXT NOT NULL,
+          budgetAmount INTEGER NOT NULL,
+          notes TEXT,
+          firebaseDocId TEXT,
+          isSynced INTEGER DEFAULT 0,
+          syncedAt INTEGER,
+          localCreatedAt INTEGER NOT NULL,
+          updatedAt INTEGER,
+          isDeleted INTEGER DEFAULT 0
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS savings_plans(
+          id TEXT PRIMARY KEY,
+          userId TEXT NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          icon TEXT,
+          targetAmount INTEGER NOT NULL,
+          savedAmount INTEGER DEFAULT 0,
+          monthlyTarget INTEGER DEFAULT 0,
+          targetDate INTEGER,
+          isActive INTEGER DEFAULT 1,
+          firebaseDocId TEXT,
+          isSynced INTEGER DEFAULT 0,
+          syncedAt INTEGER,
+          localCreatedAt INTEGER NOT NULL,
+          updatedAt INTEGER,
+          isDeleted INTEGER DEFAULT 0
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS savings_allocations(
+          id TEXT PRIMARY KEY,
+          savingsPlanId TEXT NOT NULL,
+          userId TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          fromPaymentMethodId TEXT NOT NULL,
+          fromPaymentMethodName TEXT NOT NULL,
+          toPaymentMethodId TEXT,
+          toPaymentMethodName TEXT,
+          transferFee INTEGER DEFAULT 0,
+          notes TEXT,
+          date INTEGER NOT NULL,
+          firebaseDocId TEXT,
+          isSynced INTEGER DEFAULT 0,
+          syncedAt INTEGER,
+          localCreatedAt INTEGER NOT NULL,
+          isDeleted INTEGER DEFAULT 0
+        )
+      ''');
+    }
+
+    debugPrint('DatabaseHelper: onUpgrade v$oldVersion→v$newVersion done (data preserved)');
   }
 
   /// Create transactions table

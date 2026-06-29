@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../domain/models/savings_plan_model.dart';
 import '../../domain/models/transaction_model.dart';
 import '../local/savings_plan_dao.dart';
+import '../local/pending_operations_dao.dart';
 import 'connectivity_service.dart';
 import 'transaction_service.dart';
 
@@ -12,6 +13,9 @@ class SavingsPlanService {
   final SavingsPlanDao _dao;
   final SavingsAllocationDao _allocDao;
   final ConnectivityService _connectivity;
+  // BUG-04 FIX: inject TransactionService, tidak instantiate baru tiap call
+  final TransactionService _transactionService;
+  final PendingOperationsDao _pendingOpsDao;
   final _uuid = const Uuid();
 
   SavingsPlanService({
@@ -19,10 +23,14 @@ class SavingsPlanService {
     SavingsPlanDao? dao,
     SavingsAllocationDao? allocDao,
     ConnectivityService? connectivity,
+    TransactionService? transactionService,
+    PendingOperationsDao? pendingOpsDao,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
         _dao = dao ?? SavingsPlanDao(),
         _allocDao = allocDao ?? SavingsAllocationDao(),
-        _connectivity = connectivity ?? ConnectivityService();
+        _connectivity = connectivity ?? ConnectivityService(),
+        _transactionService = transactionService ?? TransactionService(),
+        _pendingOpsDao = pendingOpsDao ?? PendingOperationsDao();
 
   CollectionReference<Map<String, dynamic>> _col(String userId) =>
       _firestore.collection('users').doc(userId).collection('savings_plans');
@@ -56,7 +64,7 @@ class SavingsPlanService {
     return _allocDao.getByPlanId(planId);
   }
 
-  /// Create plan — Firestore-first
+  /// Create plan — Firestore-first, offline queue fallback
   Future<SavingsPlanModel> createPlan({
     required String userId,
     required String name,
@@ -92,10 +100,16 @@ class SavingsPlanService {
       }
     }
     await _dao.insertOrReplace(plan);
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'CREATE',
+      tableName: 'savings_plans',
+      recordId: id.hashCode,
+      data: {..._planToFirestore(plan), 'userId': userId},
+    );
     return plan;
   }
 
-  /// Update plan — Firestore-first
+  /// Update plan — Firestore-first, offline queue fallback
   Future<void> updatePlan(SavingsPlanModel plan) async {
     final updated = plan.copyWith(updatedAt: DateTime.now());
     final isOnline = await _connectivity.isOnline();
@@ -110,9 +124,16 @@ class SavingsPlanService {
       }
     }
     await _dao.update(updated.copyWith(isSynced: false));
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'UPDATE',
+      tableName: 'savings_plans',
+      recordId: plan.id.hashCode,
+      firebaseDocId: plan.firebaseDocId,
+      data: {..._planToFirestore(updated), 'userId': plan.userId},
+    );
   }
 
-  /// Delete plan — Firestore-first
+  /// Delete plan — Firestore-first, offline queue fallback
   Future<void> deletePlan(SavingsPlanModel plan) async {
     final isOnline = await _connectivity.isOnline();
     if (isOnline && plan.firebaseDocId != null) {
@@ -121,11 +142,20 @@ class SavingsPlanService {
           'isDeleted': true,
           'deletedAt': FieldValue.serverTimestamp(),
         });
+        await _dao.softDelete(plan.id);
+        return;
       } catch (e) {
         debugPrint('SavingsPlanService.deletePlan Firestore error: $e');
       }
     }
     await _dao.softDelete(plan.id);
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'DELETE',
+      tableName: 'savings_plans',
+      recordId: plan.id.hashCode,
+      firebaseDocId: plan.firebaseDocId,
+      data: {'id': plan.id, 'userId': plan.userId},
+    );
   }
 
   /// Add allocation — Firestore-first + auto-create expense tx dari rekening sumber
@@ -181,8 +211,7 @@ class SavingsPlanService {
 
     await _allocDao.insert(alloc);
 
-    // Auto-create expense transaction dari rekening sumber (tabungan + biaya transfer)
-    final txService = TransactionService();
+    // BUG-04 FIX: pakai injected _transactionService, bukan instantiate baru
     final totalDebit = amount + transferFee;
     final expenseTx = TransactionModel(
       id: 0,
@@ -199,7 +228,7 @@ class SavingsPlanService {
       categoryName: 'Tabungan',
       localCreatedAt: DateTime.now(),
     );
-    await txService.createTransaction(expenseTx, isOnline);
+    await _transactionService.createTransaction(expenseTx, isOnline);
 
     // Auto-create income transaction ke rekening tujuan (jika berbeda)
     if (toPaymentMethodId != null && toPaymentMethodId != fromPaymentMethodId) {
@@ -216,7 +245,7 @@ class SavingsPlanService {
         categoryName: 'Tabungan',
         localCreatedAt: DateTime.now(),
       );
-      await txService.createTransaction(incomeTx, isOnline);
+      await _transactionService.createTransaction(incomeTx, isOnline);
     }
 
     // Update savedAmount
@@ -319,12 +348,10 @@ class SavingsPlanService {
         'targetAmount': p.targetAmount,
         'savedAmount': p.savedAmount,
         'monthlyTarget': p.monthlyTarget,
-        'targetDate': p.targetDate != null
-            ? Timestamp.fromDate(p.targetDate!)
-            : null,
+        'targetDate': p.targetDate?.toIso8601String(),
         'isActive': p.isActive,
         'isDeleted': p.isDeleted,
-        'createdAt': FieldValue.serverTimestamp(),
+        'createdAt': p.localCreatedAt.toIso8601String(),
       };
 
   void _cachePlansToSqlite(List<SavingsPlanModel> plans) async {

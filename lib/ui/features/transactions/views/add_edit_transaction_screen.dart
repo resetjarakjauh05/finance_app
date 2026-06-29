@@ -12,6 +12,7 @@ import '../../../../domain/models/transaction_model.dart';
 import '../../../../domain/models/category_model.dart';
 import '../../../core/dialogs.dart';
 import 'package:intl/intl.dart';
+import '../../../core/currency_input_formatter.dart';
 
 class AddEditTransactionScreen extends StatefulWidget {
   final String userId;
@@ -66,7 +67,7 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
       _descriptionController.text = t.description;
       _selectedCategory = t.category;
       _selectedPaymentMethodId = t.paymentMethodId;
-      _nominalController.text = t.nominal.toString();
+      _nominalController.text = ThousandsSeparatorInputFormatter.formatWithDots(t.nominal.toString());
       _selectedDate = t.date;
       _notesController.text = t.notes ?? '';
     }
@@ -162,7 +163,7 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
     // Cek saldo saat expense (hanya create, bukan edit)
     if (!isEditMode &&
         _selectedCategory == TransactionCategory.expense) {
-      final nominal = int.tryParse(_nominalController.text) ?? 0;
+      final nominal = ThousandsSeparatorInputFormatter.parseValue(_nominalController.text);
       final repo = TransactionRepository(service: TransactionService());
       final saldo = await repo.getBalanceForPaymentMethod(
           widget.userId, _selectedPaymentMethodId!);
@@ -186,7 +187,7 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
           category: _selectedCategory,
           paymentMethodId: _selectedPaymentMethodId!,
           paymentMethodName: paymentMethod.name,
-          nominal: int.parse(_nominalController.text),
+          nominal: ThousandsSeparatorInputFormatter.parseValue(_nominalController.text),
           date: _selectedDate,
           notes: _notesController.text.trim().isNotEmpty
               ? _notesController.text.trim()
@@ -201,7 +202,7 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
           category: _selectedCategory,
           paymentMethodId: _selectedPaymentMethodId!,
           paymentMethodName: paymentMethod.name,
-          nominal: int.parse(_nominalController.text),
+          nominal: ThousandsSeparatorInputFormatter.parseValue(_nominalController.text),
           date: _selectedDate,
           notes: _notesController.text.trim().isNotEmpty
               ? _notesController.text.trim()
@@ -212,6 +213,8 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
       }
 
       if (mounted) {
+        // BUG-A FIX: showSuccessDialog lalu langsung pop — tidak pakai addPostFrameCallback
+        // addPostFrameCallback menyebabkan double-pop setelah dialog ditutup → layar merah
         await showSuccessDialog(
           context,
           message: isEditMode
@@ -222,11 +225,11 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
       }
     } catch (e) {
       if (mounted) {
+        // BUG-B FIX: pakai e.toString() langsung, bukan _viewModel.errorMessage yang stale
+        final errMsg = e.toString().replaceFirst('Exception: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              _viewModel.errorMessage ?? 'Gagal menyimpan transaksi',
-            ),
+            content: Text(errMsg.isNotEmpty ? errMsg : 'Gagal menyimpan transaksi'),
             backgroundColor: Colors.red,
           ),
         );
@@ -375,7 +378,7 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
             TextFormField(
               controller: _nominalController,
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Nominal',
                 hintText: '0',
@@ -387,8 +390,8 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
                 if (value == null || value.trim().isEmpty) {
                   return 'Nominal wajib diisi';
                 }
-                final nominal = int.tryParse(value);
-                if (nominal == null || nominal <= 0) {
+                final nominal = ThousandsSeparatorInputFormatter.parseValue(value);
+                if (nominal <= 0) {
                   return 'Nominal harus lebih dari 0';
                 }
                 return null;

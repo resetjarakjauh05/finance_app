@@ -8,6 +8,7 @@ import '../../../../data/repositories/payment_method_repository.dart';
 import '../../../../domain/models/bill_model.dart';
 import '../../../../domain/models/payment_method_model.dart';
 import '../../../core/dialogs.dart';
+import '../../../core/currency_input_formatter.dart';
 import '../../../core/widgets.dart';
 import '../view_models/bill_view_model.dart';
 import 'add_edit_bill_screen.dart';
@@ -415,7 +416,7 @@ class _PayDialogState extends State<_PayDialog> {
           TextFormField(
             controller: _controller,
             keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: [ThousandsSeparatorInputFormatter()],
             decoration: const InputDecoration(
               labelText: 'Nominal',
               prefixText: 'Rp ',
@@ -446,7 +447,7 @@ class _PayDialogState extends State<_PayDialog> {
         ),
         FilledButton(
           onPressed: () {
-            final amount = int.tryParse(_controller.text) ?? 0;
+            final amount = ThousandsSeparatorInputFormatter.parseValue(_controller.text);
             if (amount <= 0) return;
             Navigator.of(context).pop(
               _PayResult(amount: amount, method: _selectedMethod),

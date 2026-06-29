@@ -8,6 +8,7 @@ import '../../../../data/repositories/payment_method_repository.dart';
 import '../../../../domain/models/custody_model.dart';
 import '../../../../domain/models/custody_movement_model.dart';
 import '../../../../domain/models/payment_method_model.dart';
+import '../../../core/currency_input_formatter.dart';
 import '../../../core/dialogs.dart';
 import '../view_models/custody_view_model.dart';
 import 'add_edit_custody_screen.dart';
@@ -99,7 +100,7 @@ class _CustodyDetailScreenState extends State<CustodyDetailScreen> {
                 TextFormField(
                   controller: nominalController,
                   keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  inputFormatters: [ThousandsSeparatorInputFormatter()],
                   decoration: const InputDecoration(
                     labelText: 'Nominal',
                     prefixText: 'Rp ',
@@ -168,7 +169,7 @@ class _CustodyDetailScreenState extends State<CustodyDetailScreen> {
     );
 
     if (confirmed == true && selectedMethod != null && mounted) {
-      final amount = int.tryParse(nominalController.text) ?? 0;
+      final amount = ThousandsSeparatorInputFormatter.parseValue(nominalController.text);
       if (amount <= 0) {
         nominalController.dispose();
         descController.dispose();

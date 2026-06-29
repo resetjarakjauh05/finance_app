@@ -48,7 +48,8 @@ class NotificationService {
       requestSoundPermission: true,
     );
     await _localNotifications.initialize(
-      const InitializationSettings(android: androidSettings, iOS: iosSettings),
+      settings: const InitializationSettings(android: androidSettings, iOS: iosSettings),
+      onDidReceiveNotificationResponse: (details) {},
     );
 
     if (Platform.isAndroid) {
@@ -224,10 +225,10 @@ class NotificationService {
     );
     const iosDetails = DarwinNotificationDetails();
     await _localNotifications.show(
-      id,
-      title,
-      body,
-      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: NotificationDetails(android: androidDetails, iOS: iosDetails),
     );
   }
 

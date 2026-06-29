@@ -42,11 +42,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Firebase
+# Firebase - jangan upload ke repo
+google-services.json
+GoogleService-Info.plist
 firebase_options.dart
 *.json
-!google-services.json
-!GoogleService-Info.plist
 
 # Environment variables
 .env

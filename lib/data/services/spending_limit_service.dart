@@ -5,6 +5,7 @@ import '../../domain/models/spending_limit_model.dart';
 import '../local/spending_limit_dao.dart';
 import '../local/transaction_dao.dart';
 import '../local/database_helper.dart';
+import '../local/pending_operations_dao.dart';
 import '../../domain/models/transaction_model.dart';
 import 'connectivity_service.dart';
 
@@ -13,6 +14,7 @@ class SpendingLimitService {
   final SpendingLimitDao _dao;
   final TransactionDao _txDao;
   final ConnectivityService _connectivity;
+  final PendingOperationsDao _pendingOpsDao;
   final _uuid = const Uuid();
 
   SpendingLimitService({
@@ -20,10 +22,12 @@ class SpendingLimitService {
     SpendingLimitDao? dao,
     TransactionDao? txDao,
     ConnectivityService? connectivity,
+    PendingOperationsDao? pendingOpsDao,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
         _dao = dao ?? SpendingLimitDao(),
         _txDao = txDao ?? TransactionDao(dbHelper: DatabaseHelper()),
-        _connectivity = connectivity ?? ConnectivityService();
+        _connectivity = connectivity ?? ConnectivityService(),
+        _pendingOpsDao = pendingOpsDao ?? PendingOperationsDao();
 
   CollectionReference<Map<String, dynamic>> _col(String userId) =>
       _firestore.collection('users').doc(userId).collection('spending_limits');
@@ -49,7 +53,7 @@ class SpendingLimitService {
     return _dao.getLimits(userId);
   }
 
-  /// Create — Firestore-first
+  /// Create — Firestore-first, offline queue fallback
   Future<SpendingLimitModel> createLimit({
     required String userId,
     required int dailyLimit,
@@ -83,10 +87,16 @@ class SpendingLimitService {
       }
     }
     await _dao.insertOrReplace(limit);
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'CREATE',
+      tableName: 'spending_limits',
+      recordId: id.hashCode,
+      data: {..._toFirestore(limit), 'userId': userId},
+    );
     return limit;
   }
 
-  /// Update — Firestore-first
+  /// Update — Firestore-first, offline queue fallback
   Future<void> updateLimit(SpendingLimitModel limit) async {
     final updated = limit.copyWith(updatedAt: DateTime.now());
     final isOnline = await _connectivity.isOnline();
@@ -102,9 +112,16 @@ class SpendingLimitService {
       }
     }
     await _dao.update(updated.copyWith(isSynced: false));
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'UPDATE',
+      tableName: 'spending_limits',
+      recordId: limit.id.hashCode,
+      firebaseDocId: limit.firebaseDocId,
+      data: {..._toFirestore(updated), 'userId': limit.userId},
+    );
   }
 
-  /// Delete — Firestore-first
+  /// Delete — Firestore-first, offline queue fallback
   Future<void> deleteLimit(SpendingLimitModel limit) async {
     final isOnline = await _connectivity.isOnline();
     if (isOnline && limit.firebaseDocId != null) {
@@ -113,11 +130,20 @@ class SpendingLimitService {
           'isDeleted': true,
           'deletedAt': FieldValue.serverTimestamp(),
         });
+        await _dao.softDelete(limit.id);
+        return;
       } catch (e) {
         debugPrint('SpendingLimitService.deleteLimit Firestore error: $e');
       }
     }
     await _dao.softDelete(limit.id);
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'DELETE',
+      tableName: 'spending_limits',
+      recordId: limit.id.hashCode,
+      firebaseDocId: limit.firebaseDocId,
+      data: {'id': limit.id, 'userId': limit.userId},
+    );
   }
 
   /// Hitung total pengeluaran hari ini
@@ -181,7 +207,7 @@ class SpendingLimitService {
         'warningThreshold': l.warningThreshold,
         'isActive': l.isActive,
         'isDeleted': l.isDeleted,
-        'createdAt': FieldValue.serverTimestamp(),
+        'createdAt': l.localCreatedAt.toIso8601String(),
       };
 
   void _cacheToSqlite(List<SpendingLimitModel> limits) async {

@@ -45,12 +45,13 @@ class SyncEngine extends ChangeNotifier {
         _connectivityService = connectivityService ?? ConnectivityService(),
         _firestore = firestore ?? FirebaseFirestore.instance;
 
-  void start() {
+  // BUG-03 FIX: start() sekarang async agar DB ready sebelum query pending ops
+  Future<void> start() async {
     _connectivitySubscription =
         _connectivityService.onConnectivityChanged.listen((isOnline) {
       if (isOnline) syncPendingOperations();
     });
-    _updatePendingCount();
+    await _updatePendingCount();
   }
 
   void stop() {
@@ -114,6 +115,37 @@ class SyncEngine extends ChangeNotifier {
           await _syncCustody(
             operation: operation, recordId: recordId,
             firebaseDocId: firebaseDocId, data: data,
+          );
+          break;
+        case 'monthly_budgets':
+          await _syncGenericUserSubcollection(
+            operation: operation, firebaseDocId: firebaseDocId,
+            data: data, subcollection: 'monthly_budgets',
+          );
+          break;
+        case 'spending_limits':
+          await _syncGenericUserSubcollection(
+            operation: operation, firebaseDocId: firebaseDocId,
+            data: data, subcollection: 'spending_limits',
+          );
+          break;
+        case 'savings_plans':
+          await _syncGenericUserSubcollection(
+            operation: operation, firebaseDocId: firebaseDocId,
+            data: data, subcollection: 'savings_plans',
+          );
+          break;
+        case 'savings_allocations':
+          await _syncGenericUserSubcollection(
+            operation: operation, firebaseDocId: firebaseDocId,
+            data: data, subcollection: 'savings_allocations',
+          );
+          break;
+        case 'payment_methods':
+          await _syncPaymentMethod(
+            operation: operation,
+            firebaseDocId: firebaseDocId,
+            data: data,
           );
           break;
       }
@@ -219,6 +251,113 @@ class SyncEngine extends ChangeNotifier {
     }
   }
 
+  Future<void> _syncPaymentMethod({
+    required String operation,
+    String? firebaseDocId,
+    required Map<String, dynamic> data,
+  }) async {
+    final String userId = data['userId'] as String;
+    final String docId = data['id'] as String? ?? firebaseDocId ?? '';
+    final col = _firestore.collection('paymentMethods').doc(userId).collection('methods');
+
+    switch (operation) {
+      case 'CREATE':
+        await col.doc(docId).set({
+          'userId': userId,
+          'name': data['name'],
+          'type': data['type'],
+          'bankName': data['bankName'],
+          'accountNumber': data['accountNumber'],
+          'isActive': data['isActive'] ?? true,
+          'order': data['order'] ?? 0,
+          'createdAt': data['createdAt'] is String
+              ? Timestamp.fromDate(DateTime.parse(data['createdAt'] as String))
+              : FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        break;
+      case 'UPDATE':
+        final targetId = firebaseDocId ?? docId;
+        final updates = <String, dynamic>{
+          'name': data['name'],
+          'type': data['type'],
+          'bankName': data['bankName'],
+          'accountNumber': data['accountNumber'],
+          'isActive': data['isActive'],
+          'order': data['order'],
+          'updatedAt': FieldValue.serverTimestamp(),
+        }..removeWhere((k, v) => v == null);
+        await col.doc(targetId).update(updates);
+        break;
+      case 'DELETE':
+        final targetId = firebaseDocId ?? docId;
+        await col.doc(targetId).update({
+          'isActive': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        break;
+    }
+  }
+
+  Future<void> _syncGenericUserSubcollection({
+    required String operation,
+    String? firebaseDocId,
+    required Map<String, dynamic> data,
+    required String subcollection,
+  }) async {
+    final String userId = data['userId'] as String;
+    final String docId = data['id'] as String;
+    final col = _firestore.collection('users').doc(userId).collection(subcollection);
+
+    // Strip non-serializable fields & convert ISO strings to Timestamps
+    final cleanData = Map<String, dynamic>.from(data)
+      ..remove('updatedAt')
+      ..remove('deletedAt');
+
+    // Convert ISO string timestamps → Firestore Timestamps
+    if (cleanData['createdAt'] is String) {
+      try {
+        cleanData['createdAt'] = Timestamp.fromDate(DateTime.parse(cleanData['createdAt'] as String));
+      } catch (_) {
+        cleanData.remove('createdAt');
+      }
+    } else {
+      cleanData.remove('createdAt');
+    }
+
+    if (cleanData['targetDate'] is String) {
+      try {
+        cleanData['targetDate'] = Timestamp.fromDate(DateTime.parse(cleanData['targetDate'] as String));
+      } catch (_) {
+        cleanData.remove('targetDate');
+      }
+    }
+
+    switch (operation) {
+      case 'CREATE':
+        await col.doc(docId).set({
+          ...cleanData,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        break;
+      case 'UPDATE':
+        final targetId = firebaseDocId ?? docId;
+        await col.doc(targetId).update({
+          ...cleanData,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        break;
+      case 'DELETE':
+        final targetId = firebaseDocId ?? docId;
+        await col.doc(targetId).update({
+          'isDeleted': true,
+          'deletedAt': FieldValue.serverTimestamp(),
+        });
+        break;
+    }
+  }
+
   Map<String, dynamic> _toTransactionFirestore(Map<String, dynamic> data) => {
     'userId': data['userId'],
     'description': data['description'],
@@ -239,13 +378,20 @@ class SyncEngine extends ChangeNotifier {
     'name': data['name'],
     'nominal': data['nominal'],
     'paidAmount': data['paidAmount'] ?? 0,
-    'dueDate': data['dueDate'] is int
-        ? Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(data['dueDate'] as int))
-        : data['dueDate'],
+    'dueDate': data['dueDate'] is String
+        ? Timestamp.fromDate(DateTime.parse(data['dueDate'] as String))
+        : data['dueDate'] is int
+            ? Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(data['dueDate'] as int))
+            : data['dueDate'],
     'status': data['status'],
     'type': data['type'],
+    'category': data['category'],
+    'categoryId': data['categoryId'],
+    'categoryName': data['categoryName'],
     'notes': data['notes'],
-    'createdAt': FieldValue.serverTimestamp(),
+    'createdAt': data['createdAt'] is String
+        ? Timestamp.fromDate(DateTime.parse(data['createdAt'] as String))
+        : FieldValue.serverTimestamp(),
     'updatedAt': FieldValue.serverTimestamp(),
   };
 

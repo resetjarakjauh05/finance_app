@@ -12,6 +12,7 @@ import '../../../../data/repositories/category_repository.dart';
 import '../../../../data/services/category_service.dart';
 import '../../../../data/local/category_dao.dart';
 import '../view_models/monthly_budget_view_model.dart';
+import '../../../core/currency_input_formatter.dart';
 
 class MonthlyBudgetScreen extends StatefulWidget {
   final String userId;
@@ -484,7 +485,7 @@ class _MonthlyBudgetFormScreenState extends State<MonthlyBudgetFormScreen> {
   void initState() {
     super.initState();
     if (_isEdit) {
-      _amountController.text = widget.existing!.budgetAmount.toString();
+      _amountController.text = ThousandsSeparatorInputFormatter.formatWithDots(widget.existing!.budgetAmount.toString());
       _notesController.text = widget.existing!.notes ?? '';
     }
     _loadCategories();
@@ -541,13 +542,14 @@ class _MonthlyBudgetFormScreenState extends State<MonthlyBudgetFormScreen> {
                 labelText: 'Target Anggaran (Rp)',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                prefixText: 'Rp ',
               ),
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Nominal tidak boleh kosong';
-                final val = int.tryParse(v);
-                if (val == null || val <= 0) return 'Nominal harus lebih dari 0';
+                final val = ThousandsSeparatorInputFormatter.parseValue(v);
+                if (val <= 0) return 'Nominal harus lebih dari 0';
                 return null;
               },
             ),
@@ -617,7 +619,7 @@ class _MonthlyBudgetFormScreenState extends State<MonthlyBudgetFormScreen> {
       return;
     }
     setState(() => _isSaving = true);
-    final amount = int.parse(_amountController.text);
+    final amount = ThousandsSeparatorInputFormatter.parseValue(_amountController.text);
     final notes = _notesController.text.trim().isEmpty
         ? null
         : _notesController.text.trim();

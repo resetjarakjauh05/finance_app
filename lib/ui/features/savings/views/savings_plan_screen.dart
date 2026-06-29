@@ -9,6 +9,7 @@ import '../../../../data/services/savings_plan_service.dart';
 import '../../../../data/services/payment_method_service.dart';
 import '../../../../data/local/savings_plan_dao.dart';
 import '../view_models/savings_plan_view_model.dart';
+import '../../../core/currency_input_formatter.dart';
 
 class SavingsPlanScreen extends StatefulWidget {
   final String userId;
@@ -480,9 +481,9 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
     if (_isEdit) {
       _nameController.text = widget.existing!.name;
       _descController.text = widget.existing!.description ?? '';
-      _targetController.text = widget.existing!.targetAmount.toString();
+      _targetController.text = ThousandsSeparatorInputFormatter.formatWithDots(widget.existing!.targetAmount.toString());
       _monthlyController.text = widget.existing!.monthlyTarget > 0
-          ? widget.existing!.monthlyTarget.toString()
+          ? ThousandsSeparatorInputFormatter.formatWithDots(widget.existing!.monthlyTarget.toString())
           : '';
       _icon = widget.existing!.icon ?? '🐷';
       _targetDate = widget.existing!.targetDate;
@@ -552,13 +553,14 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
                 labelText: 'Target Total (Rp)',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.flag_outlined),
+                prefixText: 'Rp ',
               ),
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Target tidak boleh kosong';
-                final val = int.tryParse(v);
-                if (val == null || val <= 0) return 'Target harus lebih dari 0';
+                final val = ThousandsSeparatorInputFormatter.parseValue(v);
+                if (val <= 0) return 'Target harus lebih dari 0';
                 return null;
               },
             ),
@@ -571,9 +573,10 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
                 labelText: 'Target per Bulan (Rp, opsional)',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.calendar_month_outlined),
+                prefixText: 'Rp ',
               ),
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
             ),
             const SizedBox(height: 12),
 
@@ -660,8 +663,8 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
-    final targetVal = int.parse(_targetController.text);
-    final monthlyVal = int.tryParse(_monthlyController.text) ?? 0;
+    final targetVal = ThousandsSeparatorInputFormatter.parseValue(_targetController.text);
+    final monthlyVal = ThousandsSeparatorInputFormatter.parseValue(_monthlyController.text);
     final desc = _descController.text.trim().isEmpty
         ? null
         : _descController.text.trim();
@@ -821,13 +824,14 @@ class _SavingsAllocationFormScreenState
                 labelText: 'Jumlah Tabungan (Rp)',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.savings_outlined),
+                prefixText: 'Rp ',
               ),
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Nominal tidak boleh kosong';
-                final val = int.tryParse(v);
-                if (val == null || val <= 0) return 'Nominal harus lebih dari 0';
+                final val = ThousandsSeparatorInputFormatter.parseValue(v);
+                if (val <= 0) return 'Nominal harus lebih dari 0';
                 return null;
               },
             ),
@@ -883,14 +887,15 @@ class _SavingsAllocationFormScreenState
                   labelText: 'Biaya Transfer (Rp) - Opsional',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.price_change_outlined),
+                  prefixText: 'Rp ',
                   helperText: 'Kosongkan jika tidak ada biaya transfer',
                 ),
                 keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: [ThousandsSeparatorInputFormatter()],
                 validator: (v) {
                   if (v != null && v.isNotEmpty) {
-                    final val = int.tryParse(v);
-                    if (val == null || val < 0) return 'Biaya transfer tidak boleh negatif';
+                    final val = ThousandsSeparatorInputFormatter.parseValue(v);
+                    if (val < 0) return 'Biaya transfer tidak boleh negatif';
                   }
                   return null;
                 },
@@ -955,12 +960,12 @@ class _SavingsAllocationFormScreenState
       userId: widget.userId,
       planId: widget.plan.id,
       planName: widget.plan.name,
-      amount: int.parse(_amountController.text),
+      amount: ThousandsSeparatorInputFormatter.parseValue(_amountController.text),
       fromPaymentMethodId: _fromMethod!.id,
       fromPaymentMethodName: _fromMethod!.name,
       toPaymentMethodId: _toMethod?.id,
       toPaymentMethodName: _toMethod?.name,
-      transferFee: int.tryParse(_transferFeeController.text) ?? 0,
+      transferFee: ThousandsSeparatorInputFormatter.parseValue(_transferFeeController.text),
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),

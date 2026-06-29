@@ -8,6 +8,7 @@ import '../../../../data/repositories/payment_method_repository.dart';
 import '../../../../domain/models/transaction_model.dart';
 import '../../../../domain/models/payment_method_model.dart';
 import '../../../core/dialogs.dart';
+import '../../../core/currency_input_formatter.dart';
 
 class TransferScreen extends StatefulWidget {
   final String userId;
@@ -90,8 +91,8 @@ class _TransferScreenState extends State<TransferScreen> {
       return;
     }
 
-    final nominal = int.tryParse(_nominalController.text) ?? 0;
-    final fee = int.tryParse(_feeController.text) ?? 0;
+    final nominal = ThousandsSeparatorInputFormatter.parseValue(_nominalController.text);
+    final fee = ThousandsSeparatorInputFormatter.parseValue(_feeController.text);
     final totalKeluar = nominal + fee;
     final notes = _notesController.text.trim().isNotEmpty
         ? _notesController.text.trim()
@@ -276,7 +277,7 @@ class _TransferScreenState extends State<TransferScreen> {
                   TextFormField(
                     controller: _nominalController,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [ThousandsSeparatorInputFormatter()],
                     decoration: const InputDecoration(
                       labelText: 'Nominal Transfer',
                       prefixText: 'Rp ',
@@ -285,9 +286,8 @@ class _TransferScreenState extends State<TransferScreen> {
                     ),
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'Nominal tidak boleh kosong';
-                      if (int.tryParse(v) == null || int.parse(v) <= 0) {
-                        return 'Nominal harus lebih dari 0';
-                      }
+                      final val = ThousandsSeparatorInputFormatter.parseValue(v);
+                      if (val <= 0) return 'Nominal harus lebih dari 0';
                       return null;
                     },
                   ),
@@ -297,7 +297,7 @@ class _TransferScreenState extends State<TransferScreen> {
                   TextFormField(
                     controller: _feeController,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [ThousandsSeparatorInputFormatter()],
                     decoration: const InputDecoration(
                       labelText: 'Biaya Transfer (opsional)',
                       prefixText: 'Rp ',
