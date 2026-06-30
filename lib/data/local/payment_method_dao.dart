@@ -29,35 +29,56 @@ class PaymentMethodDao {
     );
   }
 
-  /// Soft delete
+  /// Soft delete — nonaktifkan + tandai isDeleted agar tidak di-restore dari Firestore cache
   Future<void> softDelete(String id) async {
     final db = await _db;
     await db.update(
       'payment_methods',
-      {'isActive': 0, 'updatedAt': DateTime.now().millisecondsSinceEpoch},
+      {'isActive': 0, 'isDeleted': 1, 'updatedAt': DateTime.now().millisecondsSinceEpoch},
       where: 'id = ?',
       whereArgs: [id],
     );
   }
 
-  /// Get all active methods for userId
+  /// Mark as pending permanent delete (isDeleted=1) — skip saat cache dari Firestore
+  Future<void> markAsDeleted(String id) async {
+    final db = await _db;
+    await db.update(
+      'payment_methods',
+      {'isDeleted': 1, 'isActive': 0, 'updatedAt': DateTime.now().millisecondsSinceEpoch},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Hard delete — hapus permanen dari SQLite
+  Future<void> hardDelete(String id) async {
+    final db = await _db;
+    await db.delete(
+      'payment_methods',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Get all active methods for userId (exclude isDeleted)
   Future<List<PaymentMethodModel>> getAll(String userId) async {
     final db = await _db;
     final rows = await db.query(
       'payment_methods',
-      where: 'userId = ?',
+      where: 'userId = ? AND (isDeleted IS NULL OR isDeleted = 0)',
       whereArgs: [userId],
       orderBy: '`order` ASC',
     );
     return rows.map(_fromSqlite).toList();
   }
 
-  /// Get active only
+  /// Get active only (exclude isDeleted)
   Future<List<PaymentMethodModel>> getActive(String userId) async {
     final db = await _db;
     final rows = await db.query(
       'payment_methods',
-      where: 'userId = ? AND isActive = 1',
+      where: 'userId = ? AND isActive = 1 AND (isDeleted IS NULL OR isDeleted = 0)',
       whereArgs: [userId],
       orderBy: '`order` ASC',
     );
@@ -72,6 +93,18 @@ class PaymentMethodDao {
       where: 'userId = ?',
       whereArgs: [userId],
     );
+  }
+
+  /// Ambil IDs yang isDeleted=1 (pending permanent delete)
+  Future<List<String>> getDeletedIds(String userId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'payment_methods',
+      columns: ['id'],
+      where: 'userId = ? AND isDeleted = 1',
+      whereArgs: [userId],
+    );
+    return rows.map((r) => r['id'] as String).toList();
   }
 
   Map<String, dynamic> _toSqlite(PaymentMethodModel m) => {

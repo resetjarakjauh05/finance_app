@@ -6,9 +6,8 @@ part of 'payment_method_model.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-_$PaymentMethodModelImpl _$$PaymentMethodModelImplFromJson(
-        Map<String, dynamic> json) =>
-    _$PaymentMethodModelImpl(
+_PaymentMethodModel _$PaymentMethodModelFromJson(Map<String, dynamic> json) =>
+    _PaymentMethodModel(
       id: json['id'] as String,
       userId: json['userId'] as String,
       name: json['name'] as String,
@@ -25,8 +24,7 @@ _$PaymentMethodModelImpl _$$PaymentMethodModelImplFromJson(
           : DateTime.parse(json['updatedAt'] as String),
     );
 
-Map<String, dynamic> _$$PaymentMethodModelImplToJson(
-        _$PaymentMethodModelImpl instance) =>
+Map<String, dynamic> _$PaymentMethodModelToJson(_PaymentMethodModel instance) =>
     <String, dynamic>{
       'id': instance.id,
       'userId': instance.userId,

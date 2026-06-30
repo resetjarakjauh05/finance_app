@@ -72,7 +72,7 @@ class DatabaseHelper {
           debugPrint('DB onOpen: added custody.updatedAt');
         }
 
-        // Ensure custody_movements table has custodyFirebaseDocId
+        // Ensure custody_movements table has custodyFirebaseDocId + isDeleted
         final movCols = await db.rawQuery('PRAGMA table_info(custody_movements)');
         final movColNames = movCols.map((c) => c['name'] as String).toSet();
         if (!movColNames.contains('custodyFirebaseDocId')) {
@@ -80,6 +80,19 @@ class DatabaseHelper {
             "ALTER TABLE custody_movements ADD COLUMN custodyFirebaseDocId TEXT",
           );
           debugPrint('DB onOpen: added custody_movements.custodyFirebaseDocId');
+        }
+        // BUG-6 FIX: isDeleted diperlukan untuk soft-delete movements
+        if (!movColNames.contains('isDeleted')) {
+          await db.execute(
+            "ALTER TABLE custody_movements ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0",
+          );
+          debugPrint('DB onOpen: added custody_movements.isDeleted');
+        }
+        if (!movColNames.contains('transferFee')) {
+          await db.execute(
+            "ALTER TABLE custody_movements ADD COLUMN transferFee INTEGER NOT NULL DEFAULT 0",
+          );
+          debugPrint('DB onOpen: added custody_movements.transferFee');
         }
 
         // Ensure transactions table has categoryId + categoryName
@@ -168,6 +181,8 @@ class DatabaseHelper {
             savedAmount INTEGER DEFAULT 0,
             monthlyTarget INTEGER DEFAULT 0,
             targetDate INTEGER,
+            savingsPaymentMethodId TEXT,
+            savingsPaymentMethodName TEXT,
             isActive INTEGER DEFAULT 1,
             firebaseDocId TEXT,
             isSynced INTEGER DEFAULT 0,
@@ -177,6 +192,17 @@ class DatabaseHelper {
             isDeleted INTEGER DEFAULT 0
           )
         ''');
+        // Migration: tambah kolom baru jika belum ada (device lama)
+        final spCols = await db.rawQuery('PRAGMA table_info(savings_plans)');
+        final spColNames = spCols.map((c) => c['name'] as String).toSet();
+        if (!spColNames.contains('savingsPaymentMethodId')) {
+          await db.execute('ALTER TABLE savings_plans ADD COLUMN savingsPaymentMethodId TEXT');
+          debugPrint('DB onOpen: added savings_plans.savingsPaymentMethodId');
+        }
+        if (!spColNames.contains('savingsPaymentMethodName')) {
+          await db.execute('ALTER TABLE savings_plans ADD COLUMN savingsPaymentMethodName TEXT');
+          debugPrint('DB onOpen: added savings_plans.savingsPaymentMethodName');
+        }
         debugPrint('DB onOpen: savings_plans table ensured');
 
         // Ensure savings_allocations table exists
@@ -224,6 +250,16 @@ class DatabaseHelper {
         debugPrint('DB onOpen: savings_allocations table ensured');
 
         // Ensure payment_methods SQLite cache table exists
+        // Detect schema lama (id INTEGER) → drop & recreate dengan schema baru (id TEXT)
+        final pmColsCheck = await db.rawQuery('PRAGMA table_info(payment_methods)');
+        final pmIdCol = pmColsCheck.where((c) => c['name'] == 'id').firstOrNull;
+        final pmIdIsInteger = pmIdCol != null &&
+            (pmIdCol['type'] as String).toUpperCase().contains('INTEGER');
+        if (pmIdIsInteger) {
+          // Tabel lama tidak kompatibel — hapus dan buat ulang
+          await db.execute('DROP TABLE IF EXISTS payment_methods');
+          debugPrint('DB onOpen: dropped old payment_methods (INTEGER id schema)');
+        }
         await db.execute('''
           CREATE TABLE IF NOT EXISTS payment_methods(
             id TEXT PRIMARY KEY,
@@ -238,6 +274,33 @@ class DatabaseHelper {
             updatedAt INTEGER
           )
         ''');
+        // ALTER TABLE untuk device yang sudah punya tabel lama tanpa kolom baru
+        final pmCols = await db.rawQuery('PRAGMA table_info(payment_methods)');
+        final pmColNames = pmCols.map((c) => c['name'] as String).toSet();
+        if (!pmColNames.contains('order')) {
+          await db.execute('ALTER TABLE payment_methods ADD COLUMN "order" INTEGER DEFAULT 0');
+          debugPrint('DB onOpen: added payment_methods.order');
+        }
+        if (!pmColNames.contains('accountNumber')) {
+          await db.execute('ALTER TABLE payment_methods ADD COLUMN accountNumber TEXT');
+          debugPrint('DB onOpen: added payment_methods.accountNumber');
+        }
+        if (!pmColNames.contains('bankName')) {
+          await db.execute('ALTER TABLE payment_methods ADD COLUMN bankName TEXT');
+          debugPrint('DB onOpen: added payment_methods.bankName');
+        }
+        if (!pmColNames.contains('createdAt')) {
+          await db.execute('ALTER TABLE payment_methods ADD COLUMN createdAt INTEGER');
+          debugPrint('DB onOpen: added payment_methods.createdAt');
+        }
+        if (!pmColNames.contains('updatedAt')) {
+          await db.execute('ALTER TABLE payment_methods ADD COLUMN updatedAt INTEGER');
+          debugPrint('DB onOpen: added payment_methods.updatedAt');
+        }
+        if (!pmColNames.contains('isDeleted')) {
+          await db.execute('ALTER TABLE payment_methods ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0');
+          debugPrint('DB onOpen: added payment_methods.isDeleted');
+        }
         debugPrint('DB onOpen: payment_methods table ensured');
       },
     );
@@ -484,11 +547,13 @@ class DatabaseHelper {
         custodyFirebaseDocId TEXT,
         movementType TEXT NOT NULL,
         nominal INTEGER NOT NULL,
+        transferFee INTEGER NOT NULL DEFAULT 0,
         date INTEGER NOT NULL,
         description TEXT,
         isSynced INTEGER DEFAULT 0,
         syncedAt INTEGER,
         localCreatedAt INTEGER NOT NULL,
+        isDeleted INTEGER DEFAULT 0,
         FOREIGN KEY (custodyId) REFERENCES custody(id) ON DELETE CASCADE
       )
     ''');

@@ -188,7 +188,22 @@ class TransactionService {
           if (t != null) transactions.add(t);
         }
         // Cache to SQLite
-        _cacheTransactionsToSqlite(userId, transactions);
+        await _cacheTransactionsToSqlite(userId, transactions);
+
+        // Merge data offline yang belum sync ke Firestore
+        final allLocal = await _transactionDao.getAllByUserId(userId);
+        final unsyncedLocal = allLocal
+            .where((r) => (r['isSynced'] as int? ?? 0) == 0 && r['firebaseDocId'] == null)
+            .map((m) => TransactionModelExtension.fromSqlite(m))
+            .toList();
+        if (unsyncedLocal.isNotEmpty) {
+          final merged = [...transactions, ...unsyncedLocal];
+          merged.sort((a, b) => b.date.compareTo(a.date));
+          if (limit != null && merged.length > limit) {
+            return merged.take(limit).toList();
+          }
+          return merged;
+        }
         return transactions;
       } catch (e) {
         debugPrint('getTransactions Firestore error, fallback SQLite: $e');

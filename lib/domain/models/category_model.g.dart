@@ -6,8 +6,8 @@ part of 'category_model.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-_$CategoryModelImpl _$$CategoryModelImplFromJson(Map<String, dynamic> json) =>
-    _$CategoryModelImpl(
+_CategoryModel _$CategoryModelFromJson(Map<String, dynamic> json) =>
+    _CategoryModel(
       id: json['id'] as String,
       userId: json['userId'] as String,
       name: json['name'] as String,
@@ -27,7 +27,7 @@ _$CategoryModelImpl _$$CategoryModelImplFromJson(Map<String, dynamic> json) =>
       isDeleted: json['isDeleted'] as bool? ?? false,
     );
 
-Map<String, dynamic> _$$CategoryModelImplToJson(_$CategoryModelImpl instance) =>
+Map<String, dynamic> _$CategoryModelToJson(_CategoryModel instance) =>
     <String, dynamic>{
       'id': instance.id,
       'userId': instance.userId,

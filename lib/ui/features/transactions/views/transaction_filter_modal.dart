@@ -185,7 +185,7 @@ class _TransactionFilterModalState extends State<TransactionFilterModal> {
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String?>(
-                    value: _paymentMethodId,
+                    initialValue: _paymentMethodId,
                     decoration: InputDecoration(
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),

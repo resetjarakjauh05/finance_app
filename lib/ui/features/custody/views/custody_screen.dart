@@ -40,19 +40,14 @@ class _CustodyScreenState extends State<CustodyScreen> {
   }
 
   void _navigateToAddEdit({CustodyModel? custody}) async {
-    final result = await Navigator.of(context).push<String>(
+    await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (context) =>
             AddEditCustodyScreen(userId: widget.userId, custody: custody),
       ),
     );
-    if (result != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result), backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2)),
-      );
-      _viewModel.init();
-    }
+    // Selalu reload setelah kembali
+    if (mounted) _viewModel.init();
   }
 
   void _navigateToDetail(CustodyModel custody) {
@@ -67,6 +62,20 @@ class _CustodyScreenState extends State<CustodyScreen> {
   }
 
   Future<void> _handleDelete(CustodyModel custody) async {
+    // Cek dulu apakah ada pergerakan — jika ada, larang hapus
+    final hasMovements = await _viewModel.hasMovements(custody);
+    if (!mounted) return;
+
+    if (hasMovements) {
+      await showErrorDialog(
+        context,
+        title: 'Tidak Dapat Dihapus',
+        message: '"${custody.depositorName}" memiliki riwayat pergerakan. '
+            'Hapus semua pergerakan terlebih dahulu sebelum menghapus titipan.',
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(

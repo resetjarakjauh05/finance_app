@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/services/custody_service.dart';
 import '../../../../data/services/payment_method_service.dart';
@@ -73,6 +72,7 @@ class _CustodyDetailScreenState extends State<CustodyDetailScreen> {
     }
 
     final nominalController = TextEditingController();
+    final transferFeeController = TextEditingController();
     final descController = TextEditingController();
     MovementType selectedType = MovementType.masuk;
     DateTime selectedDate = DateTime.now();
@@ -110,7 +110,7 @@ class _CustodyDetailScreenState extends State<CustodyDetailScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<PaymentMethodModel>(
-                  value: selectedMethod,
+                  initialValue: selectedMethod,
                   decoration: const InputDecoration(
                     labelText: 'Metode Pembayaran',
                     border: OutlineInputBorder(),
@@ -145,6 +145,18 @@ class _CustodyDetailScreenState extends State<CustodyDetailScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
+                  controller: transferFeeController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [ThousandsSeparatorInputFormatter()],
+                  decoration: const InputDecoration(
+                    labelText: 'Biaya Transfer (opsional)',
+                    prefixText: 'Rp ',
+                    border: OutlineInputBorder(),
+                    helperText: 'Kosongkan jika tidak ada biaya transfer',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
                   controller: descController,
                   decoration: const InputDecoration(
                     labelText: 'Keterangan (opsional)',
@@ -170,9 +182,13 @@ class _CustodyDetailScreenState extends State<CustodyDetailScreen> {
 
     if (confirmed == true && selectedMethod != null && mounted) {
       final amount = ThousandsSeparatorInputFormatter.parseValue(nominalController.text);
+      final fee = ThousandsSeparatorInputFormatter.parseValue(transferFeeController.text);
       if (amount <= 0) {
-        nominalController.dispose();
-        descController.dispose();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          nominalController.dispose();
+          transferFeeController.dispose();
+          descController.dispose();
+        });
         return;
       }
       try {
@@ -180,17 +196,15 @@ class _CustodyDetailScreenState extends State<CustodyDetailScreen> {
           custody: _custody,
           movementType: selectedType,
           nominal: amount,
+          transferFee: fee,
           date: selectedDate,
           paymentMethod: selectedMethod!,
           description: descController.text.trim().isNotEmpty
               ? descController.text.trim()
               : null,
         );
-        final newBal = _viewModel.movements.fold<int>(
-            0,
-            (sum, m) => m.movementType == MovementType.masuk
-                ? sum + m.nominal
-                : sum - m.nominal);
+        final delta = selectedType == MovementType.masuk ? amount : -amount;
+        final newBal = _custody.currentBalance + delta;
         setState(() => _custody = _custody.copyWith(currentBalance: newBal));
 
         if (mounted) {
@@ -203,8 +217,11 @@ class _CustodyDetailScreenState extends State<CustodyDetailScreen> {
         if (mounted) await showErrorDialog(context, message: e.toString());
       }
     }
-    nominalController.dispose();
-    descController.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      nominalController.dispose();
+      transferFeeController.dispose();
+      descController.dispose();
+    });
   }
 
   @override

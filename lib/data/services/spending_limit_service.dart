@@ -44,7 +44,18 @@ class SpendingLimitService {
         final limits = snap.docs
             .map((d) => _fromFirestore(d.id, d.data(), userId))
             .toList();
-        _cacheToSqlite(limits);
+        await _cacheToSqlite(limits);
+
+        // Merge data offline yang belum sync ke Firestore
+        final allLocal = await _dao.getLimits(userId);
+        final unsyncedLocal = allLocal
+            .where((l) => !l.isSynced && l.firebaseDocId == null)
+            .toList();
+        if (unsyncedLocal.isNotEmpty) {
+          final merged = [...limits, ...unsyncedLocal];
+          merged.sort((a, b) => a.localCreatedAt.compareTo(b.localCreatedAt));
+          return merged;
+        }
         return limits;
       } catch (e) {
         debugPrint('SpendingLimitService.getLimits Firestore error, fallback: $e');
@@ -210,7 +221,7 @@ class SpendingLimitService {
         'createdAt': l.localCreatedAt.toIso8601String(),
       };
 
-  void _cacheToSqlite(List<SpendingLimitModel> limits) async {
+  Future<void> _cacheToSqlite(List<SpendingLimitModel> limits) async {
     try {
       for (final l in limits) {
         await _dao.insertOrReplace(l);

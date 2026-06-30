@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/services/auth_service.dart';
 import '../../../../data/services/transaction_service.dart';
 import '../../../../data/services/notification_service.dart';
 import '../../../../data/services/payment_method_service.dart';
+import '../../../../data/services/spending_limit_service.dart';
+import '../../../../data/services/monthly_budget_service.dart';
+import '../../../../data/services/savings_plan_service.dart';
+import '../../../../data/services/category_service.dart';
 import '../../../../data/repositories/auth_repository.dart';
 import '../../../../data/repositories/transaction_repository.dart';
 import '../../../../data/repositories/payment_method_repository.dart';
 import '../../../../domain/models/transaction_model.dart';
 import '../../../../domain/models/payment_method_model.dart';
+import '../../../../domain/models/spending_limit_model.dart';
+import '../../../../domain/models/monthly_budget_model.dart';
+import '../../../../domain/models/savings_plan_model.dart';
 import '../../auth/view_models/auth_view_model.dart';
 import '../../payment_methods/views/payment_methods_screen.dart';
 import '../../transactions/views/transactions_screen.dart';
@@ -53,6 +61,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<PaymentMethodModel> _paymentMethods = [];
   bool _isLoadingMethods = false;
 
+  // Progress data
+  List<LimitCheckResult> _limitResults = [];
+  List<Map<String, dynamic>> _budgetProgress = [];
+  List<SavingsPlanModel> _savingsPlans = [];
+  bool _isLoadingProgress = false;
+
   final _currencyFormat = NumberFormat.currency(
     locale: 'id_ID',
     symbol: 'Rp ',
@@ -87,8 +101,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final notif = NotificationService();
           await notif.saveTokenToFirestore(user.id);
           await notif.checkBillsDue(user.id);
+          // Pre-fetch categories & payment methods → cache ke SQLite
+          // agar tersedia saat offline
+          _prefetchOfflineData(user.id);
         });
       }
+    }
+  }
+
+  /// Pre-fetch & cache data penting ke SQLite saat online
+  void _prefetchOfflineData(String userId) async {
+    try {
+      final categoryService = CategoryService();
+      await categoryService.getCategories(userId);
+      debugPrint('Dashboard: categories pre-fetched & cached');
+    } catch (e) {
+      debugPrint('Dashboard: category pre-fetch error: $e');
+    }
+    try {
+      final pmService = PaymentMethodService();
+      await pmService.getAllPaymentMethods(userId);
+      debugPrint('Dashboard: payment methods pre-fetched & cached');
+    } catch (e) {
+      debugPrint('Dashboard: payment method pre-fetch error: $e');
     }
   }
 
@@ -97,6 +132,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _loadBalance(),
       _loadRecentTransactions(),
       _loadPaymentMethodBalances(),
+      _loadProgressData(),
     ]);
   }
 
@@ -144,6 +180,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (_) {
       if (mounted) setState(() => _isLoadingRecent = false);
+    }
+  }
+
+  Future<void> _loadProgressData() async {
+    final user = _authViewModel.currentUser;
+    if (user == null) return;
+    setState(() => _isLoadingProgress = true);
+    try {
+      final now = DateTime.now();
+      final yearMonth = MonthlyBudgetService.formatYearMonth(now);
+
+      // Load limit harian, anggaran bulanan, tabungan aktif paralel
+      final limitService = SpendingLimitService();
+      final budgetService = MonthlyBudgetService();
+      final savingsService = SavingsPlanService();
+
+      // Load paralel — tipe berbeda, pakai Future.wait terpisah
+      final limits = await limitService.checkLimits(user.id);
+      final budgets = await budgetService.getBudgetsByMonth(user.id, yearMonth);
+      final plans = await savingsService.getPlans(user.id);
+
+      if (!mounted) return;
+
+      // Budget progress: hitung actual spending per kategori
+      final budgetProgress = <Map<String, dynamic>>[];
+      for (final b in budgets.take(3)) {
+        final actual = await budgetService.getActualSpending(user.id, yearMonth, b.categoryId);
+        budgetProgress.add({
+          'budget': b,
+          'actual': actual,
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _limitResults = limits;
+          _budgetProgress = budgetProgress;
+          _savingsPlans = plans
+              .where((p) => p.isActive && !p.isDeleted)
+              .take(3)
+              .toList();
+          _isLoadingProgress = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingProgress = false);
     }
   }
 
@@ -490,6 +572,136 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             const SizedBox(height: 24),
 
+            // Progress section
+            if (_isLoadingProgress)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+            else if (_limitResults.isNotEmpty || _budgetProgress.isNotEmpty || _savingsPlans.isNotEmpty) ...[
+              Text('Progres Keuangan',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+
+              // Limit harian
+              if (_limitResults.isNotEmpty) ...[
+                ..._limitResults.take(2).map((r) {
+                  final pct = r.limit.dailyLimit > 0 ? (r.spent / r.limit.dailyLimit).clamp(0.0, 1.0) : 0.0;
+                  final color = r.status == SpendingLimitStatus.exceeded ? Colors.red
+                      : r.status == SpendingLimitStatus.warning ? Colors.orange : Colors.green;
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            const Icon(Icons.timer_outlined, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Expanded(child: Text('Limit ${r.limit.displayName}',
+                                style: const TextStyle(fontSize: 12, color: Colors.grey))),
+                            Text('${_currencyFormat.format(r.spent)} / ${_currencyFormat.format(r.limit.dailyLimit)}',
+                                style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+                          ]),
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: pct, minHeight: 6,
+                              backgroundColor: color.withAlpha(30),
+                              valueColor: AlwaysStoppedAnimation(color),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+
+              // Anggaran bulanan
+              if (_budgetProgress.isNotEmpty) ...[
+                ..._budgetProgress.map((bp) {
+                  final b = bp['budget'] as MonthlyBudgetModel;
+                  final actual = bp['actual'] as int;
+                  final pct = b.budgetAmount > 0 ? (actual / b.budgetAmount).clamp(0.0, 1.0) : 0.0;
+                  final status = b.statusForSpent(actual);
+                  final color = status == BudgetStatus.exceeded ? Colors.red
+                      : status == BudgetStatus.warning ? Colors.orange : Colors.blue;
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            const Icon(Icons.account_balance_wallet_outlined, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Expanded(child: Text('${b.categoryIcon} ${b.categoryName}',
+                                style: const TextStyle(fontSize: 12, color: Colors.grey))),
+                            Text('${_currencyFormat.format(actual)} / ${_currencyFormat.format(b.budgetAmount)}',
+                                style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold)),
+                          ]),
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: pct, minHeight: 6,
+                              backgroundColor: color.withAlpha(30),
+                              valueColor: AlwaysStoppedAnimation(color),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+
+              // Rencana tabungan
+              if (_savingsPlans.isNotEmpty) ...[
+                ..._savingsPlans.map((p) {
+                  final pct = p.targetAmount > 0 ? (p.savedAmount / p.targetAmount).clamp(0.0, 1.0) : 0.0;
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Text(p.icon ?? '🐷', style: const TextStyle(fontSize: 14)),
+                            const SizedBox(width: 4),
+                            Expanded(child: Text(p.name,
+                                style: const TextStyle(fontSize: 12, color: Colors.grey))),
+                            Text('${(pct * 100).toStringAsFixed(0)}%',
+                                style: const TextStyle(fontSize: 11, color: Colors.teal, fontWeight: FontWeight.bold)),
+                          ]),
+                          const SizedBox(height: 4),
+                          Row(children: [
+                            Expanded(child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: pct, minHeight: 6,
+                                backgroundColor: Colors.teal.withAlpha(30),
+                                valueColor: const AlwaysStoppedAnimation(Colors.teal),
+                              ),
+                            )),
+                            const SizedBox(width: 8),
+                            Text(_currencyFormat.format(p.savedAmount),
+                                style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                          ]),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+              const SizedBox(height: 16),
+            ],
+
             // Saldo per metode pembayaran
             Text(
               'Saldo per Metode Pembayaran',
@@ -536,30 +748,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   color: m.isActive ? null : Colors.grey,
                                 ),
                               ),
-                              subtitle: Row(
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(m.type.displayName),
-                                  if (!m.isActive) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red.shade50,
-                                        border: Border.all(
-                                            color: Colors.red.shade200),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        'Nonaktif',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.red.shade700,
-                                          fontWeight: FontWeight.w500,
+                                  Row(
+                                    children: [
+                                      Text(m.type.displayName,
+                                          style: const TextStyle(fontSize: 12)),
+                                      if (!m.isActive) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.shade50,
+                                            border: Border.all(color: Colors.red.shade200),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text('Nonaktif',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.red.shade700,
+                                                fontWeight: FontWeight.w500,
+                                              )),
                                         ),
+                                      ],
+                                    ],
+                                  ),
+                                  if (m.accountNumber != null && m.accountNumber!.isNotEmpty)
+                                    GestureDetector(
+                                      onTap: () {
+                                        Clipboard.setData(ClipboardData(text: m.accountNumber!));
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Nomor ${m.accountNumber} disalin'),
+                                            duration: const Duration(seconds: 1),
+                                          ),
+                                        );
+                                      },
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(m.accountNumber!,
+                                              style: const TextStyle(
+                                                  fontSize: 11, fontFamily: 'monospace')),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.copy, size: 11, color: Colors.grey),
+                                        ],
                                       ),
                                     ),
-                                  ],
                                 ],
                               ),
                               trailing: Text(

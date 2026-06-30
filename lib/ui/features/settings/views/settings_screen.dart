@@ -42,48 +42,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _handleEditName() async {
     final controller = TextEditingController(text: _currentDisplayName);
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Ubah Nama'),
-          content: TextField(
-            controller: controller,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Nama Lengkap',
-              border: OutlineInputBorder(),
-            ),
-            autofocus: true,
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ubah Nama'),
+        content: TextField(
+          controller: controller,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Nama Lengkap',
+            border: OutlineInputBorder(),
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Batal')),
-            FilledButton(onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Simpan')),
-          ],
+          autofocus: true,
         ),
-      );
-      if (confirmed == true && controller.text.trim().isNotEmpty && mounted) {
-        try {
-          await _authViewModel.authRepository.updateDisplayName(controller.text.trim());
-          setState(() => _currentDisplayName = controller.text.trim());
-          if (mounted) {
-            await showSuccessDialog(context,
-                title: 'Nama Diperbarui',
-                message: 'Nama berhasil diubah.',
-                icon: Icons.check_circle);
-          }
-        } catch (e) {
-          if (mounted) {
-            final msg = e.toString().replaceFirst('Exception: ', '');
-            await showErrorDialog(context, message: msg.isNotEmpty ? msg : 'Gagal memperbarui nama.');
-          }
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Simpan')),
+        ],
+      ),
+    );
+    // Simpan text SEBELUM dispose, dispose di akhir setelah semua async selesai
+    final newName = controller.text.trim();
+    if (confirmed == true && newName.isNotEmpty && mounted) {
+      try {
+        await _authViewModel.authRepository.updateDisplayName(newName);
+        setState(() => _currentDisplayName = newName);
+        if (mounted) {
+          await showSuccessDialog(context,
+              title: 'Nama Diperbarui',
+              message: 'Nama berhasil diubah.',
+              icon: Icons.check_circle);
+        }
+      } catch (e) {
+        if (mounted) {
+          final msg = e.toString().replaceFirst('Exception: ', '');
+          await showErrorDialog(context, message: msg.isNotEmpty ? msg : 'Gagal memperbarui nama.');
         }
       }
-    } finally {
-      controller.dispose();
     }
+    // Dispose setelah animasi dialog selesai & semua async selesai
+    // Hindari dispose saat Flutter masih rebuild TextField dalam animasi close dialog
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
   }
 
   Future<void> _handleChangePassword() async {
@@ -92,94 +93,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool obscureNew = true;
     bool obscureConfirm = true;
 
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setStateDialog) => AlertDialog(
-            title: const Text('Ganti Password'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: newPasswordController,
-                    obscureText: obscureNew,
-                    decoration: InputDecoration(
-                      labelText: 'Password Baru',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () => setStateDialog(() => obscureNew = !obscureNew),
-                      ),
-                    ),
-                    autofocus: true,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: confirmController,
-                    obscureText: obscureConfirm,
-                    decoration: InputDecoration(
-                      labelText: 'Konfirmasi Password',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () => setStateDialog(() => obscureConfirm = !obscureConfirm),
-                      ),
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('Ganti Password'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: newPasswordController,
+                  obscureText: obscureNew,
+                  decoration: InputDecoration(
+                    labelText: 'Password Baru',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setStateDialog(() => obscureNew = !obscureNew),
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmController,
+                  obscureText: obscureConfirm,
+                  decoration: InputDecoration(
+                    labelText: 'Konfirmasi Password',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setStateDialog(() => obscureConfirm = !obscureConfirm),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Batal')),
-              FilledButton(onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Simpan')),
-            ],
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Batal')),
+            FilledButton(onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Simpan')),
+          ],
         ),
-      );
+      ),
+    );
+    // Baca nilai SEBELUM dispose
+    final newPass = newPasswordController.text;
+    final confirmPass = confirmController.text;
+    // Dispose setelah animasi dialog selesai — hindari "used after disposed" error
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      newPasswordController.dispose();
+      confirmController.dispose();
+    });
 
-      if (confirmed == true && mounted) {
-        final newPass = newPasswordController.text;
-        final confirmPass = confirmController.text;
-
-        if (newPass.isEmpty) {
-          await showErrorDialog(context, message: 'Password baru tidak boleh kosong.');
-        } else if (newPass.length < 6) {
-          await showErrorDialog(context, message: 'Password minimal 6 karakter.');
-        } else if (newPass != confirmPass) {
-          await showErrorDialog(context, message: 'Konfirmasi password tidak cocok.');
-        } else {
-          try {
-            await _authViewModel.authRepository.updatePassword(newPass);
-            if (mounted) {
-              await showSuccessDialog(context,
-                  title: 'Password Diperbarui',
-                  message: 'Password berhasil diubah.',
-                  icon: Icons.check_circle);
-            }
-          } catch (e) {
-            if (mounted) {
-              final msg = e.toString().replaceFirst('Exception: ', '');
-              // Jika Firebase minta re-auth, minta user login ulang
-              if (msg.contains('login ulang') || msg.contains('recent-login') || msg.contains('requires-recent-login')) {
-                await showErrorDialog(
-                  context,
-                  title: 'Sesi Kedaluwarsa',
-                  message: 'Sesi Anda sudah terlalu lama. Silakan keluar lalu masuk kembali, kemudian coba ganti password lagi.',
-                );
-              } else {
-                await showErrorDialog(context, message: msg.isNotEmpty ? msg : 'Gagal mengganti password.');
-              }
+    if (confirmed == true && mounted) {
+      if (newPass.isEmpty) {
+        await showErrorDialog(context, message: 'Password baru tidak boleh kosong.');
+      } else if (newPass.length < 6) {
+        await showErrorDialog(context, message: 'Password minimal 6 karakter.');
+      } else if (newPass != confirmPass) {
+        await showErrorDialog(context, message: 'Konfirmasi password tidak cocok.');
+      } else {
+        try {
+          await _authViewModel.authRepository.updatePassword(newPass);
+          if (mounted) {
+            await showSuccessDialog(context,
+                title: 'Password Diperbarui',
+                message: 'Password berhasil diubah. Silakan login ulang.',
+                icon: Icons.check_circle);
+          }
+          // Pop semua route dulu, baru signOut
+          // AuthGate StreamBuilder sudah siap → akan tampil LoginScreen
+          if (mounted) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          }
+          await _authViewModel.signOut();
+        } catch (e) {
+          if (mounted) {
+            final msg = e.toString().replaceFirst('Exception: ', '');
+            if (msg.contains('login ulang') || msg.contains('recent-login') || msg.contains('requires-recent-login')) {
+              await showErrorDialog(
+                context,
+                title: 'Sesi Kedaluwarsa',
+                message: 'Sesi Anda sudah terlalu lama. Silakan keluar lalu masuk kembali, kemudian coba ganti password lagi.',
+              );
+            } else {
+              await showErrorDialog(context, message: msg.isNotEmpty ? msg : 'Gagal mengganti password.');
             }
           }
         }
       }
-    } finally {
-      newPasswordController.dispose();
-      confirmController.dispose();
     }
   }
 
@@ -202,8 +207,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirmed == true && mounted) {
-      // AuthGate StreamBuilder otomatis redirect ke LoginScreen saat signOut
-      // Tidak perlu popUntil atau showSuccessDialog — akan menyebabkan orphan dialog
+      // Pop semua route di atas AuthGate dulu, lalu signOut
+      // Sehingga AuthGate StreamBuilder bisa rebuild ke LoginScreen tanpa orphan route
+      Navigator.of(context).popUntil((route) => route.isFirst);
       await _authViewModel.signOut();
     }
   }

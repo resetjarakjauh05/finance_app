@@ -68,9 +68,10 @@ class AuthService {
     if (user == null) throw Exception('No user signed in');
     try {
       await user.updateDisplayName(displayName);
-      await _firestore.collection('users').doc(user.uid).update({
+      await user.reload();
+      await _firestore.collection('users').doc(user.uid).set({
         'displayName': displayName,
-      });
+      }, SetOptions(merge: true));
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     }

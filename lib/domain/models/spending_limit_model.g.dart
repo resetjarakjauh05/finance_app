@@ -6,9 +6,8 @@ part of 'spending_limit_model.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-_$SpendingLimitModelImpl _$$SpendingLimitModelImplFromJson(
-        Map<String, dynamic> json) =>
-    _$SpendingLimitModelImpl(
+_SpendingLimitModel _$SpendingLimitModelFromJson(Map<String, dynamic> json) =>
+    _SpendingLimitModel(
       id: json['id'] as String,
       userId: json['userId'] as String,
       categoryId: json['categoryId'] as String?,
@@ -29,8 +28,7 @@ _$SpendingLimitModelImpl _$$SpendingLimitModelImplFromJson(
       isDeleted: json['isDeleted'] as bool? ?? false,
     );
 
-Map<String, dynamic> _$$SpendingLimitModelImplToJson(
-        _$SpendingLimitModelImpl instance) =>
+Map<String, dynamic> _$SpendingLimitModelToJson(_SpendingLimitModel instance) =>
     <String, dynamic>{
       'id': instance.id,
       'userId': instance.userId,

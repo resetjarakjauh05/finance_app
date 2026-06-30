@@ -6,9 +6,8 @@ part of 'monthly_budget_model.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-_$MonthlyBudgetModelImpl _$$MonthlyBudgetModelImplFromJson(
-        Map<String, dynamic> json) =>
-    _$MonthlyBudgetModelImpl(
+_MonthlyBudgetModel _$MonthlyBudgetModelFromJson(Map<String, dynamic> json) =>
+    _MonthlyBudgetModel(
       id: json['id'] as String,
       userId: json['userId'] as String,
       yearMonth: json['yearMonth'] as String,
@@ -29,8 +28,7 @@ _$MonthlyBudgetModelImpl _$$MonthlyBudgetModelImplFromJson(
       isDeleted: json['isDeleted'] as bool? ?? false,
     );
 
-Map<String, dynamic> _$$MonthlyBudgetModelImplToJson(
-        _$MonthlyBudgetModelImpl instance) =>
+Map<String, dynamic> _$MonthlyBudgetModelToJson(_MonthlyBudgetModel instance) =>
     <String, dynamic>{
       'id': instance.id,
       'userId': instance.userId,

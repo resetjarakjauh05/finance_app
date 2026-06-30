@@ -48,7 +48,19 @@ class MonthlyBudgetService {
         final budgets = snap.docs
             .map((d) => _fromFirestore(d.id, d.data(), userId))
             .toList();
-        _cacheToSqlite(budgets);
+        // Cache ke SQLite (await, tidak fire-and-forget)
+        await _cacheToSqlite(budgets);
+
+        // Merge data offline yang belum sync ke Firestore
+        final allLocal = await _dao.getBudgetsByMonth(userId, yearMonth);
+        final unsyncedLocal = allLocal
+            .where((b) => !b.isSynced && b.firebaseDocId == null)
+            .toList();
+        if (unsyncedLocal.isNotEmpty) {
+          final merged = [...budgets, ...unsyncedLocal];
+          merged.sort((a, b) => a.localCreatedAt.compareTo(b.localCreatedAt));
+          return merged;
+        }
         return budgets;
       } catch (e) {
         debugPrint('MonthlyBudgetService.getBudgetsByMonth Firestore error: $e');
@@ -228,7 +240,7 @@ class MonthlyBudgetService {
         'createdAt': b.localCreatedAt.toIso8601String(),
       };
 
-  void _cacheToSqlite(List<MonthlyBudgetModel> budgets) async {
+  Future<void> _cacheToSqlite(List<MonthlyBudgetModel> budgets) async {
     try {
       for (final b in budgets) {
         await _dao.insertOrReplace(b);

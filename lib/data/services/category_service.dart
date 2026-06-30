@@ -3,21 +3,25 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../domain/models/category_model.dart';
 import '../local/category_dao.dart';
+import '../local/pending_operations_dao.dart';
 import 'connectivity_service.dart';
 
 class CategoryService {
   final FirebaseFirestore _firestore;
   final CategoryDao _dao;
   final ConnectivityService _connectivity;
+  final PendingOperationsDao _pendingOpsDao;
   final _uuid = const Uuid();
 
   CategoryService({
     FirebaseFirestore? firestore,
     CategoryDao? dao,
     ConnectivityService? connectivity,
+    PendingOperationsDao? pendingOpsDao,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
         _dao = dao ?? CategoryDao(),
-        _connectivity = connectivity ?? ConnectivityService();
+        _connectivity = connectivity ?? ConnectivityService(),
+        _pendingOpsDao = pendingOpsDao ?? PendingOperationsDao();
 
   CollectionReference<Map<String, dynamic>> _col(String userId) =>
       _firestore.collection('users').doc(userId).collection('categories');
@@ -110,8 +114,22 @@ class CategoryService {
         debugPrint('CategoryService.createCategory Firestore error: $e');
       }
     }
-    // Offline: save SQLite only
+    // Offline: save SQLite + queue pending
     await _dao.insertOrReplace(category);
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'CREATE',
+      tableName: 'categories',
+      recordId: id.hashCode,
+      data: {
+        'id': id,
+        'userId': userId,
+        'name': category.name,
+        'icon': icon,
+        'color': color,
+        'isPreset': false,
+        'isActive': true,
+      },
+    );
     return category;
   }
 
@@ -135,12 +153,31 @@ class CategoryService {
         debugPrint('CategoryService.updateCategory Firestore error: $e');
       }
     }
+    // Offline: simpan SQLite + queue pending
     await _dao.update(updated.copyWith(isSynced: false));
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'UPDATE',
+      tableName: 'categories',
+      recordId: category.id.hashCode,
+      firebaseDocId: category.firebaseDocId,
+      data: {
+        'id': category.id,
+        'userId': category.userId,
+        'name': updated.name,
+        'icon': updated.icon,
+        'color': updated.color,
+        'isPreset': category.isPreset,
+        'isActive': category.isActive,
+      },
+    );
   }
 
   /// Delete kategori — Firestore-first
   Future<void> deleteCategory(CategoryModel category) async {
     if (category.isPreset) throw Exception('Kategori preset tidak dapat dihapus');
+
+    // Soft delete lokal dulu agar UI langsung responsif
+    await _dao.softDelete(category.id);
 
     final isOnline = await _connectivity.isOnline();
     if (isOnline && category.firebaseDocId != null) {
@@ -149,11 +186,22 @@ class CategoryService {
           'isDeleted': true,
           'deletedAt': FieldValue.serverTimestamp(),
         });
+        return;
       } catch (e) {
         debugPrint('CategoryService.deleteCategory Firestore error: $e');
       }
     }
-    await _dao.softDelete(category.id);
+    // Offline: queue pending (SQLite sudah soft-deleted di atas)
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'DELETE',
+      tableName: 'categories',
+      recordId: category.id.hashCode,
+      firebaseDocId: category.firebaseDocId,
+      data: {
+        'id': category.id,
+        'userId': category.userId,
+      },
+    );
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────

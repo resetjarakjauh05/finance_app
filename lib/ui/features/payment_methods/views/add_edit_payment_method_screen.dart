@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../data/services/payment_method_service.dart';
 import '../../../../data/repositories/payment_method_repository.dart';
 import '../view_models/payment_method_view_model.dart';
@@ -67,7 +68,7 @@ class _AddEditPaymentMethodScreenState
     if (!_formKey.currentState!.validate()) return;
 
     final method = PaymentMethodModel(
-      id: widget.method?.id ?? '',
+      id: widget.method?.id ?? const Uuid().v4(),
       userId: widget.userId,
       name: _nameController.text.trim(),
       type: _selectedType,
@@ -152,7 +153,7 @@ class _AddEditPaymentMethodScreenState
 
             // Type dropdown
             DropdownButtonFormField<PaymentMethodType>(
-              value: _selectedType,
+              initialValue: _selectedType,
               decoration: const InputDecoration(
                 labelText: 'Tipe',
                 prefixIcon: Icon(Icons.category_outlined),

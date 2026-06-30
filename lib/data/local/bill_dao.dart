@@ -30,7 +30,7 @@ class BillDao {
     final db = await _dbHelper.database;
     final result = await db.query(
       'bills',
-      where: 'firebaseDocId = ? AND isDeleted = 0',
+      where: 'firebaseDocId = ?',
       whereArgs: [firebaseDocId],
     );
     return result.isNotEmpty ? result.first : null;

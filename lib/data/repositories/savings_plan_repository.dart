@@ -21,6 +21,8 @@ class SavingsPlanRepository {
     String? icon,
     int monthlyTarget = 0,
     DateTime? targetDate,
+    String? savingsPaymentMethodId,
+    String? savingsPaymentMethodName,
   }) async {
     if (name.trim().isEmpty) throw Exception('Nama tabungan tidak boleh kosong');
     if (targetAmount <= 0) throw Exception('Target harus lebih dari 0');
@@ -32,6 +34,8 @@ class SavingsPlanRepository {
       icon: icon,
       monthlyTarget: monthlyTarget,
       targetDate: targetDate,
+      savingsPaymentMethodId: savingsPaymentMethodId,
+      savingsPaymentMethodName: savingsPaymentMethodName,
     );
   }
 

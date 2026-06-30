@@ -2,18 +2,21 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../../../domain/models/payment_method_model.dart';
 import '../../../../data/repositories/payment_method_repository.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 /// ViewModel untuk payment method management
 class PaymentMethodViewModel extends ChangeNotifier {
   final PaymentMethodRepository _repository;
   final String userId;
-  StreamSubscription<List<PaymentMethodModel>>? _subscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+
+  bool _isOnline = false;
 
   PaymentMethodViewModel({
     required PaymentMethodRepository repository,
     required this.userId,
   }) : _repository = repository {
-    _listenToStream();
+    _init();
   }
 
   List<PaymentMethodModel> _paymentMethods = [];
@@ -25,33 +28,55 @@ class PaymentMethodViewModel extends ChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  /// Subscribe ke Firestore realtime stream
-  void _listenToStream() {
+  Future<void> _init() async {
     _setLoading(true);
-    _subscription = _repository
-        .getPaymentMethodsStream(userId)
-        .listen(
-          (methods) {
-            _paymentMethods = methods;
-            _isLoading = false;
-            notifyListeners();
-          },
-          onError: (e) {
-            _setError(e.toString());
-            _isLoading = false;
-            notifyListeners();
-          },
-        );
+
+    // Cek koneksi awal
+    final result = await Connectivity().checkConnectivity();
+    _isOnline = !result.contains(ConnectivityResult.none);
+
+    // Monitor perubahan koneksi — saat online, reload merged data
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) async {
+      final wasOffline = !_isOnline;
+      _isOnline = !results.contains(ConnectivityResult.none);
+      if (wasOffline && _isOnline) {
+        // Baru online → reload dari Firestore+SQLite merge
+        await loadPaymentMethods();
+      }
+    });
+
+    // Load awal: selalu dari SQLite dulu (offline-safe)
+    // Jika online, getAllPaymentMethods merge Firestore+unsynced local
+    await loadPaymentMethods();
   }
 
-  /// Load payment methods (manual refresh fallback)
+  /// Load payment methods — SQLite dulu (offline-safe), merge Firestore jika berhasil
   Future<void> loadPaymentMethods() async {
     _setLoading(true);
     _clearError();
-
     try {
-      _paymentMethods = await _repository.getAllPaymentMethods(userId);
-      _setLoading(false);
+      // 1. Selalu load SQLite dulu — tidak pernah gagal
+      final local = await _repository.getLocalPaymentMethods(userId);
+      _paymentMethods = local;
+      _isLoading = false;
+      notifyListeners();
+
+      // 2. Re-check koneksi aktual saat load (bukan cached _isOnline)
+      // Connectivity cached bisa stale → false negative
+      final result = await Connectivity().checkConnectivity();
+      final isOnlineNow = !result.contains(ConnectivityResult.none);
+      _isOnline = isOnlineNow; // update cached state
+
+      if (isOnlineNow) {
+        try {
+          final merged = await _repository.getAllPaymentMethods(userId)
+              .timeout(const Duration(seconds: 5));
+          _paymentMethods = merged;
+          notifyListeners();
+        } catch (_) {
+          // Firestore gagal → tetap pakai SQLite yang sudah ditampilkan
+        }
+      }
     } catch (e) {
       _setError(e.toString());
       _setLoading(false);
@@ -63,7 +88,8 @@ class PaymentMethodViewModel extends ChangeNotifier {
     _clearError();
     try {
       await _repository.createPaymentMethod(userId, method);
-      // Stream auto-update list
+      // Offline: stream Firestore tidak emit → reload manual dari SQLite
+      await loadPaymentMethods();
     } catch (e) {
       _setError(e.toString());
       rethrow;
@@ -78,7 +104,16 @@ class PaymentMethodViewModel extends ChangeNotifier {
     _clearError();
     try {
       await _repository.updatePaymentMethod(userId, methodId, updatedMethod);
-      // Stream auto-update list
+      // Langsung reload SQLite — tidak tunggu Firestore timeout saat offline
+      _paymentMethods = await _repository.getLocalPaymentMethods(userId);
+      notifyListeners();
+      // Background: coba reload dari Firestore jika online
+      if (_isOnline) {
+        _repository.getAllPaymentMethods(userId).then((merged) {
+          _paymentMethods = merged;
+          notifyListeners();
+        }).catchError((_) {});
+      }
     } catch (e) {
       _setError(e.toString());
       rethrow;
@@ -109,10 +144,17 @@ class PaymentMethodViewModel extends ChangeNotifier {
   Future<void> permanentDeletePaymentMethod(String methodId) async {
     _clearError();
     try {
+      // Optimistic: hapus dari list lokal dulu
+      _paymentMethods = _paymentMethods
+          .where((m) => m.id != methodId)
+          .toList();
+      notifyListeners();
       await _repository.permanentDeletePaymentMethod(userId, methodId);
-      // Stream auto-update (doc deleted)
+      // Reload konfirmasi
+      await loadPaymentMethods();
     } catch (e) {
       _setError(e.toString());
+      await loadPaymentMethods();
       rethrow;
     }
   }
@@ -127,7 +169,7 @@ class PaymentMethodViewModel extends ChangeNotifier {
     _clearError();
     try {
       await _repository.initializeDefaultPaymentMethods(userId);
-      // Stream auto-update
+      await loadPaymentMethods();
     } catch (e) {
       _setError(e.toString());
       rethrow;
@@ -168,7 +210,7 @@ class PaymentMethodViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    _connectivitySub?.cancel();
     super.dispose();
   }
 }

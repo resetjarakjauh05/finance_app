@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../core/currency_input_formatter.dart';
 import '../../../../data/services/bill_service.dart';
@@ -251,7 +250,7 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
               const Center(child: CircularProgressIndicator())
             else if (_categories.isNotEmpty) ...[
               DropdownButtonFormField<CategoryModel>(
-                value: _selectedCategory,
+                initialValue: _selectedCategory,
                 decoration: InputDecoration(
                   labelText: _selectedType == BillType.hutang
                       ? 'Kategori *'

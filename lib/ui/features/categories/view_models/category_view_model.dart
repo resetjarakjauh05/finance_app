@@ -82,6 +82,11 @@ class CategoryViewModel extends ChangeNotifier {
     }
   }
 
+  /// Cek apakah kategori sudah dipakai di transaksi
+  Future<bool> isUsedInTransactions(String userId, String categoryId) async {
+    return await _repository.isUsedInTransactions(userId, categoryId);
+  }
+
   /// Delete kategori custom → auto reload
   Future<bool> deleteCategory(CategoryModel category) async {
     _errorMessage = null;

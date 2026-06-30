@@ -7,6 +7,10 @@ import '../local/sync_log_dao.dart';
 import '../local/transaction_dao.dart';
 import '../local/bill_dao.dart';
 import '../local/custody_dao.dart';
+import '../local/custody_movement_dao.dart';
+import '../local/category_dao.dart';
+import '../local/payment_method_dao.dart';
+import '../../domain/models/payment_method_model.dart';
 import 'connectivity_service.dart';
 
 class SyncEngine extends ChangeNotifier {
@@ -15,6 +19,9 @@ class SyncEngine extends ChangeNotifier {
   final TransactionDao _transactionDao;
   final BillDao _billDao;
   final CustodyDao _custodyDao;
+  final CustodyMovementDao _custodyMovementDao;
+  final CategoryDao _categoryDao;
+  final PaymentMethodDao _paymentMethodDao;
   final ConnectivityService _connectivityService;
   final FirebaseFirestore _firestore;
 
@@ -35,6 +42,9 @@ class SyncEngine extends ChangeNotifier {
     TransactionDao? transactionDao,
     BillDao? billDao,
     CustodyDao? custodyDao,
+    CustodyMovementDao? custodyMovementDao,
+    CategoryDao? categoryDao,
+    PaymentMethodDao? paymentMethodDao,
     ConnectivityService? connectivityService,
     FirebaseFirestore? firestore,
   })  : _pendingOpsDao = pendingOpsDao ?? PendingOperationsDao(),
@@ -42,6 +52,9 @@ class SyncEngine extends ChangeNotifier {
         _transactionDao = transactionDao ?? TransactionDao(),
         _billDao = billDao ?? BillDao(),
         _custodyDao = custodyDao ?? CustodyDao(),
+        _custodyMovementDao = custodyMovementDao ?? CustodyMovementDao(),
+        _categoryDao = categoryDao ?? CategoryDao(),
+        _paymentMethodDao = paymentMethodDao ?? PaymentMethodDao(),
         _connectivityService = connectivityService ?? ConnectivityService(),
         _firestore = firestore ?? FirebaseFirestore.instance;
 
@@ -117,6 +130,12 @@ class SyncEngine extends ChangeNotifier {
             firebaseDocId: firebaseDocId, data: data,
           );
           break;
+        case 'custody_movements':
+          await _syncCustodyMovement(
+            operation: operation, recordId: recordId,
+            firebaseDocId: firebaseDocId, data: data,
+          );
+          break;
         case 'monthly_budgets':
           await _syncGenericUserSubcollection(
             operation: operation, firebaseDocId: firebaseDocId,
@@ -143,6 +162,13 @@ class SyncEngine extends ChangeNotifier {
           break;
         case 'payment_methods':
           await _syncPaymentMethod(
+            operation: operation,
+            firebaseDocId: firebaseDocId,
+            data: data,
+          );
+          break;
+        case 'categories':
+          await _syncCategory(
             operation: operation,
             firebaseDocId: firebaseDocId,
             data: data,
@@ -207,6 +233,14 @@ class SyncEngine extends ChangeNotifier {
     final col = _firestore.collection('bills').doc(userId).collection('items');
     switch (operation) {
       case 'CREATE':
+        // BUG-3 FIX: cek duplicate dulu sebelum add ke Firestore
+        if (firebaseDocId != null) {
+          final doc = await col.doc(firebaseDocId).get();
+          if (doc.exists) {
+            await _billDao.markAsSynced(recordId, firebaseDocId);
+            return;
+          }
+        }
         final docRef = await col.add(_toBillFirestore(data));
         await _billDao.markAsSynced(recordId, docRef.id);
         break;
@@ -220,7 +254,10 @@ class SyncEngine extends ChangeNotifier {
         break;
       case 'DELETE':
         if (firebaseDocId == null) return;
-        await col.doc(firebaseDocId).delete();
+        await col.doc(firebaseDocId).update({
+          'isDeleted': true,
+          'deletedAt': FieldValue.serverTimestamp(),
+        });
         break;
     }
   }
@@ -233,6 +270,14 @@ class SyncEngine extends ChangeNotifier {
     final col = _firestore.collection('custody').doc(userId).collection('items');
     switch (operation) {
       case 'CREATE':
+        // Cek duplicate sebelum add ke Firestore
+        if (firebaseDocId != null) {
+          final doc = await col.doc(firebaseDocId).get();
+          if (doc.exists) {
+            await _custodyDao.markAsSynced(recordId, firebaseDocId);
+            return;
+          }
+        }
         final docRef = await col.add(_toCustodyFirestore(data));
         await _custodyDao.markAsSynced(recordId, docRef.id);
         break;
@@ -262,7 +307,9 @@ class SyncEngine extends ChangeNotifier {
 
     switch (operation) {
       case 'CREATE':
-        await col.doc(docId).set({
+        // FIX Bug #5: pakai col.add() agar Firestore generate ID baru (bukan UUID lokal)
+        // lalu update SQLite dengan firebaseDocId yang benar
+        final newDocRef = await col.add({
           'userId': userId,
           'name': data['name'],
           'type': data['type'],
@@ -275,6 +322,34 @@ class SyncEngine extends ChangeNotifier {
               : FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+        // Update SQLite: ganti localId (UUID) → firebaseDocId agar konsisten
+        final localId = data['id'] as String?;
+        if (localId != null && localId != newDocRef.id) {
+          try {
+            final type = PaymentMethodType.values.firstWhere(
+              (t) => t.name == (data['type'] as String? ?? ''),
+              orElse: () => PaymentMethodType.bank,
+            );
+            await _paymentMethodDao.insertOrReplace(PaymentMethodModel(
+              id: newDocRef.id,
+              userId: userId,
+              name: data['name'] as String,
+              type: type,
+              bankName: data['bankName'] as String?,
+              accountNumber: data['accountNumber'] as String?,
+              isActive: (data['isActive'] as bool?) ?? true,
+              order: (data['order'] as int?) ?? 0,
+              createdAt: data['createdAt'] is String
+                  ? DateTime.tryParse(data['createdAt'] as String)
+                  : DateTime.now(),
+              updatedAt: DateTime.now(),
+            ));
+            // FIX: hardDelete UUID lokal agar tidak duplicate
+            await _paymentMethodDao.hardDelete(localId);
+          } catch (e) {
+            debugPrint('SyncEngine._syncPaymentMethod update SQLite: $e');
+          }
+        }
         break;
       case 'UPDATE':
         final targetId = firebaseDocId ?? docId;
@@ -294,6 +369,118 @@ class SyncEngine extends ChangeNotifier {
         await col.doc(targetId).update({
           'isActive': false,
           'updatedAt': FieldValue.serverTimestamp(),
+        });
+        break;
+      case 'PERMANENT_DELETE':
+        // Hapus permanen dari Firestore + hardDelete SQLite
+        final targetId = firebaseDocId ?? docId;
+        if (targetId.isNotEmpty) {
+          await col.doc(targetId).delete();
+          await _paymentMethodDao.hardDelete(targetId);
+        }
+        break;
+    }
+  }
+
+  Future<void> _syncCustodyMovement({
+    required String operation,
+    required int recordId,
+    String? firebaseDocId,
+    required Map<String, dynamic> data,
+  }) async {
+    final String userId = data['userId'] as String;
+
+    // FIX Bug #4: custodyFirebaseDocId mungkin null jika custody dibuat offline
+    // → resolve dari SQLite dulu via custodyLocalId
+    String? custodyFirebaseDocId = data['custodyFirebaseDocId'] as String?;
+    if (custodyFirebaseDocId == null || custodyFirebaseDocId.isEmpty) {
+      final int? custodyLocalId = data['custodyLocalId'] as int?;
+      if (custodyLocalId != null) {
+        final localCustody = await _custodyDao.getById(custodyLocalId);
+        custodyFirebaseDocId = localCustody?['firebaseDocId'] as String?;
+      }
+    }
+
+    // Jika custody belum sync ke Firestore, skip — akan dicoba lagi nanti
+    if (custodyFirebaseDocId == null || custodyFirebaseDocId.isEmpty) {
+      throw Exception(
+          'custody_movement sync skipped: custody belum tersync (custodyFirebaseDocId null)');
+    }
+
+    final col = _firestore
+        .collection('custody')
+        .doc(userId)
+        .collection('items')
+        .doc(custodyFirebaseDocId)
+        .collection('movements');
+
+    switch (operation) {
+      case 'CREATE':
+        final docRef = await col.add({
+          'movementType': data['movementType'],
+          'nominal': data['nominal'],
+          'date': data['date'] is String
+              ? Timestamp.fromDate(DateTime.parse(data['date'] as String))
+              : data['date'],
+          'description': data['description'],
+          'createdAt': data['createdAt'] is String
+              ? Timestamp.fromDate(DateTime.parse(data['createdAt'] as String))
+              : FieldValue.serverTimestamp(),
+        });
+        // FIX Bug #3: pakai _custodyMovementDao, bukan _custodyDao
+        await _custodyMovementDao.markAsSynced(recordId, docRef.id);
+        break;
+      case 'DELETE':
+        if (firebaseDocId == null) return;
+        await col.doc(firebaseDocId).delete();
+        break;
+    }
+  }
+
+  Future<void> _syncCategory({
+    required String operation,
+    String? firebaseDocId,
+    required Map<String, dynamic> data,
+  }) async {
+    final String userId = data['userId'] as String;
+    final String localId = data['id'] as String;
+    final col = _firestore.collection('users').doc(userId).collection('categories');
+
+    switch (operation) {
+      case 'CREATE':
+        // Cek apakah sudah ada di Firestore (idempotent via localId sebagai field)
+        final existing = await col.where('id', isEqualTo: localId).limit(1).get();
+        if (existing.docs.isNotEmpty) {
+          // Sudah ada → update markSynced saja
+          await _categoryDao.markSynced(localId, existing.docs.first.id);
+          return;
+        }
+        final docRef = await col.add({
+          'id': localId,
+          'name': data['name'],
+          'icon': data['icon'],
+          'color': data['color'],
+          'isPreset': data['isPreset'] ?? false,
+          'isActive': data['isActive'] ?? true,
+          'isDeleted': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        await _categoryDao.markSynced(localId, docRef.id);
+        break;
+      case 'UPDATE':
+        final targetId = firebaseDocId ?? localId;
+        await col.doc(targetId).update({
+          'name': data['name'],
+          'icon': data['icon'],
+          'color': data['color'],
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        break;
+      case 'DELETE':
+        final targetId = firebaseDocId ?? localId;
+        await col.doc(targetId).update({
+          'isDeleted': true,
+          'deletedAt': FieldValue.serverTimestamp(),
         });
         break;
     }
@@ -402,7 +589,9 @@ class SyncEngine extends ChangeNotifier {
     'totalNominal': data['totalNominal'],
     'type': data['type'],
     'currentBalance': data['currentBalance'] ?? 0,
-    'createdAt': FieldValue.serverTimestamp(),
+    'createdAt': data['createdAt'] is String
+        ? Timestamp.fromDate(DateTime.parse(data['createdAt'] as String))
+        : FieldValue.serverTimestamp(),
     'updatedAt': FieldValue.serverTimestamp(),
   };
 

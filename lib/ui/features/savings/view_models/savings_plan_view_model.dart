@@ -58,6 +58,8 @@ class SavingsPlanViewModel extends ChangeNotifier {
     String? icon,
     int monthlyTarget = 0,
     DateTime? targetDate,
+    String? savingsPaymentMethodId,
+    String? savingsPaymentMethodName,
   }) async {
     _errorMessage = null;
     try {
@@ -69,6 +71,8 @@ class SavingsPlanViewModel extends ChangeNotifier {
         icon: icon,
         monthlyTarget: monthlyTarget,
         targetDate: targetDate,
+        savingsPaymentMethodId: savingsPaymentMethodId,
+        savingsPaymentMethodName: savingsPaymentMethodName,
       );
       await loadPlans(userId);
       return true;

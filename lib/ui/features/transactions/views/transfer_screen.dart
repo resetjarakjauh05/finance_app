@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/services/transaction_service.dart';
 import '../../../../data/services/payment_method_service.dart';
@@ -243,7 +242,7 @@ class _TransferScreenState extends State<TransferScreen> {
 
                   // From method
                   DropdownButtonFormField<PaymentMethodModel>(
-                    value: _fromMethod,
+                    initialValue: _fromMethod,
                     decoration: const InputDecoration(
                       labelText: 'Dari Rekening',
                       prefixIcon: Icon(Icons.arrow_upward, color: Colors.red),

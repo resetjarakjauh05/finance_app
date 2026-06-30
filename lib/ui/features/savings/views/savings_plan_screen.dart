@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../../domain/models/savings_plan_model.dart';
 import '../../../../domain/models/payment_method_model.dart';
@@ -10,6 +9,7 @@ import '../../../../data/services/payment_method_service.dart';
 import '../../../../data/local/savings_plan_dao.dart';
 import '../view_models/savings_plan_view_model.dart';
 import '../../../core/currency_input_formatter.dart';
+import 'savings_history_screen.dart';
 
 class SavingsPlanScreen extends StatefulWidget {
   final String userId;
@@ -130,6 +130,15 @@ class _SavingsPlanScreenState extends State<SavingsPlanScreen> {
                           onDelete: () => _confirmDelete(context, plan),
                           onAddAllocation: () =>
                               _openAllocationForm(context, plan),
+                          onViewHistory: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SavingsHistoryScreen(
+                                userId: widget.userId,
+                                plan: plan,
+                              ),
+                            ),
+                          ),
                         );
                       },
                       childCount: _vm.plans.length,
@@ -290,6 +299,7 @@ class _PlanCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onAddAllocation;
+  final VoidCallback onViewHistory;
 
   const _PlanCard({
     required this.plan,
@@ -298,6 +308,7 @@ class _PlanCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onAddAllocation,
+    required this.onViewHistory,
   });
 
   @override
@@ -354,8 +365,16 @@ class _PlanCard extends StatelessWidget {
                       onSelected: (v) {
                         if (v == 'edit') onEdit();
                         if (v == 'delete') onDelete();
+                        if (v == 'history') onViewHistory();
                       },
                       itemBuilder: (_) => [
+                        const PopupMenuItem(
+                            value: 'history',
+                            child: Row(children: [
+                              Icon(Icons.history, size: 18),
+                              SizedBox(width: 8),
+                              Text('Lihat Histori'),
+                            ])),
                         const PopupMenuItem(
                             value: 'edit', child: Text('Edit')),
                         const PopupMenuItem(
@@ -467,6 +486,11 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
   DateTime? _targetDate;
   bool _isSaving = false;
 
+  // Rekening tujuan tabungan
+  List<PaymentMethodModel> _paymentMethods = [];
+  PaymentMethodModel? _savingsMethod;
+  bool _isLoadingMethods = true;
+
   bool get _isEdit => widget.existing != null;
 
   // Daftar emoji pilihan untuk tabungan
@@ -478,6 +502,7 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
   @override
   void initState() {
     super.initState();
+    _loadPaymentMethods();
     if (_isEdit) {
       _nameController.text = widget.existing!.name;
       _descController.text = widget.existing!.description ?? '';
@@ -487,6 +512,27 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
           : '';
       _icon = widget.existing!.icon ?? '🐷';
       _targetDate = widget.existing!.targetDate;
+    }
+  }
+
+  Future<void> _loadPaymentMethods() async {
+    try {
+      final repo = PaymentMethodRepository(service: PaymentMethodService());
+      final methods = await repo.getAllPaymentMethods(widget.userId);
+      if (mounted) {
+        setState(() {
+          _paymentMethods = methods.where((m) => m.isActive).toList();
+          _isLoadingMethods = false;
+          // Pre-fill rekening tabungan jika edit
+          if (_isEdit && widget.existing!.savingsPaymentMethodId != null) {
+            _savingsMethod = _paymentMethods
+                .where((m) => m.id == widget.existing!.savingsPaymentMethodId)
+                .firstOrNull;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMethods = false);
     }
   }
 
@@ -605,6 +651,32 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
                 if (picked != null) setState(() => _targetDate = picked);
               },
             ),
+            const SizedBox(height: 12),
+
+            // Rekening Tujuan Tabungan
+            if (_isLoadingMethods)
+              const Center(child: CircularProgressIndicator())
+            else
+              DropdownButtonFormField<PaymentMethodModel?>(
+                initialValue: _savingsMethod,
+                decoration: const InputDecoration(
+                  labelText: 'Rekening Tabungan (opsional)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.savings_outlined),
+                  helperText: 'Rekening tempat uang tabungan disimpan',
+                ),
+                items: [
+                  const DropdownMenuItem<PaymentMethodModel?>(
+                    value: null,
+                    child: Text('— Tanpa Rekening Khusus —'),
+                  ),
+                  ..._paymentMethods.map((m) => DropdownMenuItem<PaymentMethodModel?>(
+                        value: m,
+                        child: Text(m.name),
+                      )),
+                ],
+                onChanged: (v) => setState(() => _savingsMethod = v),
+              ),
             const Divider(),
             const SizedBox(height: 20),
 
@@ -679,6 +751,8 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
           targetAmount: targetVal,
           monthlyTarget: monthlyVal,
           targetDate: _targetDate,
+          savingsPaymentMethodId: _savingsMethod?.id,
+          savingsPaymentMethodName: _savingsMethod?.name,
           updatedAt: DateTime.now(),
         ),
         widget.userId,
@@ -692,6 +766,8 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
         targetAmount: targetVal,
         monthlyTarget: monthlyVal,
         targetDate: _targetDate,
+        savingsPaymentMethodId: _savingsMethod?.id,
+        savingsPaymentMethodName: _savingsMethod?.name,
       );
     }
 
@@ -755,8 +831,14 @@ class _SavingsAllocationFormScreenState
       final methods = await repo.getAllPaymentMethods(widget.userId);
       if (mounted) {
         setState(() {
-          _paymentMethods = methods;
+          _paymentMethods = methods.where((m) => m.isActive).toList();
           _isLoadingMethods = false;
+          // Pre-fill rekening tujuan dari plan.savingsPaymentMethodId
+          if (widget.plan.savingsPaymentMethodId != null) {
+            _toMethod = _paymentMethods
+                .where((m) => m.id == widget.plan.savingsPaymentMethodId)
+                .firstOrNull;
+          }
         });
       }
     } catch (e) {
@@ -842,7 +924,7 @@ class _SavingsAllocationFormScreenState
               const Center(child: CircularProgressIndicator())
             else ...[
               DropdownButtonFormField<PaymentMethodModel>(
-                value: _fromMethod,
+                initialValue: _fromMethod,
                 decoration: const InputDecoration(
                   labelText: 'Ambil dari Rekening *',
                   border: OutlineInputBorder(),
@@ -859,7 +941,7 @@ class _SavingsAllocationFormScreenState
               const SizedBox(height: 12),
 
               DropdownButtonFormField<PaymentMethodModel?>(
-                value: _toMethod,
+                initialValue: _toMethod,
                 decoration: const InputDecoration(
                   labelText: 'Simpan di Rekening (Opsional)',
                   border: OutlineInputBorder(),

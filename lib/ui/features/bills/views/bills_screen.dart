@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/services/bill_service.dart';
 import '../../../../data/services/payment_method_service.dart';
@@ -285,12 +284,21 @@ class _BillsScreenState extends State<BillsScreen>
               children: [
                 Text('Total: ${_currencyFormat.format(bill.nominal)}',
                     style: Theme.of(context).textTheme.bodySmall),
-                Text('Dibayar: ${_currencyFormat.format(bill.paidAmount)}',
-                    style: Theme.of(context).textTheme.bodySmall),
-                Text('Sisa: ${_currencyFormat.format(bill.remainingAmount)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: bill.remainingAmount > 0 ? Colors.red : Colors.green)),
+                Text(
+                  // Piutang: uang masuk → label "Diterima", hutang → "Dibayar"
+                  '${bill.type == BillType.piutang ? 'Diterima' : 'Dibayar'}: ${_currencyFormat.format(bill.paidAmount)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Text(
+                  'Sisa: ${_currencyFormat.format(bill.remainingAmount)}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    // Piutang sisa = uang belum masuk → orange. Lunas = green.
+                    color: bill.remainingAmount > 0
+                        ? (bill.type == BillType.piutang ? Colors.orange : Colors.red)
+                        : Colors.green,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -300,7 +308,11 @@ class _BillsScreenState extends State<BillsScreen>
                 value: progress,
                 backgroundColor: Colors.grey.shade200,
                 valueColor: AlwaysStoppedAnimation(
-                  progress >= 1.0 ? Colors.green : Colors.blue,
+                  progress >= 1.0
+                      ? Colors.green
+                      : bill.type == BillType.piutang
+                          ? Colors.teal   // piutang partial → teal (uang masuk)
+                          : Colors.blue,  // hutang partial → blue
                 ),
                 minHeight: 8,
               ),
@@ -426,7 +438,7 @@ class _PayDialogState extends State<_PayDialog> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<PaymentMethodModel>(
-            value: _selectedMethod,
+            initialValue: _selectedMethod,
             decoration: const InputDecoration(
               labelText: 'Metode Pembayaran',
               border: OutlineInputBorder(),

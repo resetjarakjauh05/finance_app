@@ -78,6 +78,15 @@ class CustodyViewModel extends ChangeNotifier {
     }
   }
 
+  Future<bool> hasMovements(CustodyModel custody) async {
+    try {
+      final movements = await _repository.getMovements(custody);
+      return movements.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> deleteCustody(CustodyModel custody) async {
     _clearError();
     try {
@@ -105,6 +114,7 @@ class CustodyViewModel extends ChangeNotifier {
     required CustodyModel custody,
     required MovementType movementType,
     required int nominal,
+    int transferFee = 0,
     required DateTime date,
     required PaymentMethodModel paymentMethod,
     String? description,
@@ -115,6 +125,7 @@ class CustodyViewModel extends ChangeNotifier {
         custody: custody,
         movementType: movementType,
         nominal: nominal,
+        transferFee: transferFee,
         date: date,
         paymentMethod: paymentMethod,
         description: description,

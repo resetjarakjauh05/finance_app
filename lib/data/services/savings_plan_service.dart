@@ -43,14 +43,34 @@ class SavingsPlanService {
     final isOnline = await _connectivity.isOnline();
     if (isOnline) {
       try {
+        // FIX: hapus filter isActive di Firestore — dokumen lama mungkin tidak
+        // punya field isActive sehingga Firestore query skip mereka.
+        // Filter dilakukan client-side agar data lama tetap muncul.
         final snap = await _col(userId)
             .where('isDeleted', isEqualTo: false)
-            .where('isActive', isEqualTo: true)
             .get();
         final plans = snap.docs
             .map((d) => _planFromFirestore(d.id, d.data(), userId))
+            .where((p) => p.isActive)
             .toList();
-        _cachePlansToSqlite(plans);
+        await _cachePlansToSqlite(plans);
+
+        // Merge data offline yang belum sync ke Firestore
+        final allLocal = await _dao.getPlans(userId);
+        final firestoreIds = plans.map((p) => p.firebaseDocId).toSet();
+        // Include: plan belum sync (firebaseDocId null) ATAU plan yang sudah sync
+        // tapi savedAmount di SQLite lebih besar dari Firestore (allocation offline belum sync)
+        final unsyncedLocal = allLocal.where((p) {
+          if (!p.isSynced && p.firebaseDocId == null) return true;
+          // Plan sudah punya firebaseDocId tapi belum ada di Firestore snapshot
+          if (p.firebaseDocId != null && !firestoreIds.contains(p.firebaseDocId)) return true;
+          return false;
+        }).toList();
+        if (unsyncedLocal.isNotEmpty) {
+          final merged = [...plans, ...unsyncedLocal];
+          merged.sort((a, b) => a.localCreatedAt.compareTo(b.localCreatedAt));
+          return merged;
+        }
         return plans;
       } catch (e) {
         debugPrint('SavingsPlanService.getPlans Firestore error: $e');
@@ -73,6 +93,8 @@ class SavingsPlanService {
     String? icon,
     int monthlyTarget = 0,
     DateTime? targetDate,
+    String? savingsPaymentMethodId,
+    String? savingsPaymentMethodName,
   }) async {
     final id = 'savings_${_uuid.v4()}';
     final plan = SavingsPlanModel(
@@ -84,6 +106,8 @@ class SavingsPlanService {
       targetAmount: targetAmount,
       monthlyTarget: monthlyTarget,
       targetDate: targetDate,
+      savingsPaymentMethodId: savingsPaymentMethodId,
+      savingsPaymentMethodName: savingsPaymentMethodName,
       localCreatedAt: DateTime.now(),
     );
 
@@ -331,6 +355,8 @@ class SavingsPlanService {
       targetDate: data['targetDate'] != null
           ? (data['targetDate'] as Timestamp).toDate()
           : null,
+      savingsPaymentMethodId: data['savingsPaymentMethodId'] as String?,
+      savingsPaymentMethodName: data['savingsPaymentMethodName'] as String?,
       isActive: data['isActive'] as bool? ?? true,
       isSynced: true,
       syncedAt: DateTime.now(),
@@ -349,15 +375,25 @@ class SavingsPlanService {
         'savedAmount': p.savedAmount,
         'monthlyTarget': p.monthlyTarget,
         'targetDate': p.targetDate?.toIso8601String(),
+        'savingsPaymentMethodId': p.savingsPaymentMethodId,
+        'savingsPaymentMethodName': p.savingsPaymentMethodName,
         'isActive': p.isActive,
         'isDeleted': p.isDeleted,
         'createdAt': p.localCreatedAt.toIso8601String(),
       };
 
-  void _cachePlansToSqlite(List<SavingsPlanModel> plans) async {
+  // BUG-8 FIX: Future<void> bukan void — agar caller bisa await
+  // BUG-savedAmount FIX: jangan override savedAmount dari Firestore jika SQLite
+  // sudah punya nilai lebih fresh (recalculate dari allocations)
+  Future<void> _cachePlansToSqlite(List<SavingsPlanModel> plans) async {
     try {
       for (final p in plans) {
-        await _dao.insertOrReplace(p);
+        // Recalculate savedAmount dari allocations SQLite — source of truth paling fresh
+        final allocs = await _allocDao.getByPlanId(p.id);
+        final localSaved = allocs.fold<int>(0, (s, a) => s + a.amount);
+        // Pakai nilai terbesar antara Firestore dan SQLite recalculated
+        final savedAmount = localSaved > p.savedAmount ? localSaved : p.savedAmount;
+        await _dao.insertOrReplace(p.copyWith(savedAmount: savedAmount));
       }
     } catch (e) {
       debugPrint('SavingsPlanService._cachePlansToSqlite error: $e');

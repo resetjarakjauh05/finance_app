@@ -34,34 +34,32 @@ class PaymentMethodService {
   /// Stream realtime dari Firestore, cache ke SQLite saat dapat data
   Stream<List<PaymentMethodModel>> getPaymentMethodsStream(String userId) {
     return _getUserPaymentMethodsCollection(userId)
-        .orderBy('order')
         .snapshots()
         .map((snapshot) {
       final methods = snapshot.docs
           .map((doc) => _fromFirestoreDoc(doc.id, doc.data() as Map<String, dynamic>, userId))
-          .toList();
-      // Cache ke SQLite di background
+          .toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
       _cacheToSqlite(userId, methods);
       return methods;
     });
   }
 
-  /// Stream aktif dari Firestore, cache ke SQLite
   Stream<List<PaymentMethodModel>> getActivePaymentMethodsStream(String userId) {
     return _getUserPaymentMethodsCollection(userId)
-        .orderBy('order')
         .snapshots()
         .map((snapshot) {
       final methods = snapshot.docs
           .map((doc) => _fromFirestoreDoc(doc.id, doc.data() as Map<String, dynamic>, userId))
           .where((m) => m.isActive)
-          .toList();
+          .toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
       _cacheToSqlite(userId, methods);
       return methods;
     });
   }
 
-  /// Get all — Firestore-first, fallback SQLite
+  /// Get all — Firestore-first, fallback SQLite + merge unsynced local
   Future<List<PaymentMethodModel>> getAllPaymentMethods(String userId) async {
     final isOnline = await _connectivity.isOnline();
     if (isOnline) {
@@ -71,11 +69,28 @@ class PaymentMethodService {
             .map((doc) => _fromFirestoreDoc(doc.id, doc.data() as Map<String, dynamic>, userId))
             .toList();
         await _cacheToSqlite(userId, methods);
+
+        // Merge data offline yang belum sync ke Firestore
+        final allLocal = await _dao.getAll(userId);
+        final firestoreIds = methods.map((m) => m.id).toSet();
+        final unsyncedLocal = allLocal
+            .where((m) => !firestoreIds.contains(m.id))
+            .toList();
+        if (unsyncedLocal.isNotEmpty) {
+          final merged = [...methods, ...unsyncedLocal];
+          merged.sort((a, b) => a.order.compareTo(b.order));
+          return merged;
+        }
         return methods;
       } catch (e) {
         debugPrint('PaymentMethodService.getAllPaymentMethods Firestore error: $e');
       }
     }
+    return _dao.getAll(userId);
+  }
+
+  /// Get langsung dari SQLite — bypass Firestore, untuk offline-first load
+  Future<List<PaymentMethodModel>> getLocalPaymentMethods(String userId) async {
     return _dao.getAll(userId);
   }
 
@@ -90,6 +105,18 @@ class PaymentMethodService {
             .where((m) => m.isActive)
             .toList();
         await _cacheToSqlite(userId, methods);
+
+        // Merge data offline aktif yang belum sync ke Firestore
+        final allLocal = await _dao.getActive(userId);
+        final firestoreIds = methods.map((m) => m.id).toSet();
+        final unsyncedLocal = allLocal
+            .where((m) => !firestoreIds.contains(m.id))
+            .toList();
+        if (unsyncedLocal.isNotEmpty) {
+          final merged = [...methods, ...unsyncedLocal];
+          merged.sort((a, b) => a.order.compareTo(b.order));
+          return merged;
+        }
         return methods;
       } catch (e) {
         debugPrint('PaymentMethodService.getActivePaymentMethods Firestore error: $e');
@@ -134,6 +161,10 @@ class PaymentMethodService {
         });
         final saved = method.copyWith(id: docRef.id, createdAt: DateTime.now(), updatedAt: DateTime.now());
         await _dao.insertOrReplace(saved);
+        // Hapus UUID lokal jika berbeda dari Firestore ID (hindari duplicate)
+        if (method.id.isNotEmpty && method.id != docRef.id) {
+          await _dao.hardDelete(method.id);
+        }
         return docRef.id;
       } catch (e) {
         debugPrint('PaymentMethodService.createPaymentMethod Firestore error: $e');
@@ -159,13 +190,24 @@ class PaymentMethodService {
           ...updates,
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        // Refresh cache
+        // Refresh cache — update semua field
         final all = await _dao.getAll(userId);
         final existing = all.where((m) => m.id == methodId).firstOrNull;
         if (existing != null) {
           await _dao.update(existing.copyWith(
-            isActive: updates['isActive'] as bool? ?? existing.isActive,
             name: updates['name'] as String? ?? existing.name,
+            type: updates['type'] != null
+                ? PaymentMethodType.values.firstWhere(
+                    (t) => t.name == updates['type'],
+                    orElse: () => existing.type)
+                : existing.type,
+            bankName: updates.containsKey('bankName')
+                ? updates['bankName'] as String?
+                : existing.bankName,
+            accountNumber: updates.containsKey('accountNumber')
+                ? updates['accountNumber'] as String?
+                : existing.accountNumber,
+            isActive: updates['isActive'] as bool? ?? existing.isActive,
             updatedAt: DateTime.now(),
           ));
         }
@@ -179,8 +221,19 @@ class PaymentMethodService {
     final existing = all.where((m) => m.id == methodId).firstOrNull;
     if (existing != null) {
       final updated = existing.copyWith(
-        isActive: updates['isActive'] as bool? ?? existing.isActive,
         name: updates['name'] as String? ?? existing.name,
+        type: updates['type'] != null
+            ? PaymentMethodType.values.firstWhere(
+                (t) => t.name == updates['type'],
+                orElse: () => existing.type)
+            : existing.type,
+        bankName: updates.containsKey('bankName')
+            ? updates['bankName'] as String?
+            : existing.bankName,
+        accountNumber: updates.containsKey('accountNumber')
+            ? updates['accountNumber'] as String?
+            : existing.accountNumber,
+        isActive: updates['isActive'] as bool? ?? existing.isActive,
         updatedAt: DateTime.now(),
       );
       await _dao.update(updated);
@@ -218,17 +271,29 @@ class PaymentMethodService {
     );
   }
 
-  /// Permanent delete
+  /// Permanent delete — hapus dari SQLite + Firestore
   Future<void> permanentDeletePaymentMethod(String userId, String methodId) async {
-    await _dao.softDelete(methodId);
+    // Mark as deleted dulu (bukan hardDelete) agar tidak di-insert ulang saat cache Firestore
+    await _dao.markAsDeleted(methodId);
     final isOnline = await _connectivity.isOnline();
     if (isOnline) {
       try {
         await _getUserPaymentMethodsCollection(userId).doc(methodId).delete();
+        // Setelah Firestore delete berhasil, baru hardDelete dari SQLite
+        await _dao.hardDelete(methodId);
+        return;
       } catch (e) {
         debugPrint('PaymentMethodService.permanentDelete Firestore error: $e');
       }
     }
+    // Offline → queue PERMANENT_DELETE agar sync saat online
+    await _pendingOpsDao.addPendingOperation(
+      operation: 'PERMANENT_DELETE',
+      tableName: 'payment_methods',
+      recordId: methodId.hashCode,
+      firebaseDocId: methodId,
+      data: {'userId': userId, 'id': methodId},
+    );
   }
 
   /// Reorder — Firestore-first, offline queue fallback
@@ -265,44 +330,106 @@ class PaymentMethodService {
     }
   }
 
-  /// Initialize default payment methods untuk user baru
+  /// Initialize default payment methods untuk user baru — SQLite + Firestore
   Future<void> initializeDefaultPaymentMethods(String userId) async {
     final defaults = [
-      {'name': 'Tunai', 'type': PaymentMethodType.cash.name, 'order': 0},
-      {'name': 'Bank Mandiri', 'type': PaymentMethodType.bank.name, 'bankName': 'Bank Mandiri', 'order': 1},
-      {'name': 'Bank Jatim', 'type': PaymentMethodType.bank.name, 'bankName': 'Bank Jatim', 'order': 2},
-      {'name': 'Bank Jago', 'type': PaymentMethodType.bank.name, 'bankName': 'Bank Jago', 'order': 3},
-      {'name': 'Dana', 'type': PaymentMethodType.wallet.name, 'order': 4},
-      {'name': 'SEA BANK', 'type': PaymentMethodType.bank.name, 'bankName': 'SEA BANK', 'order': 5},
+      {'name': 'Tunai', 'type': PaymentMethodType.cash, 'bankName': null, 'order': 0},
+      {'name': 'Bank Mandiri', 'type': PaymentMethodType.bank, 'bankName': 'Bank Mandiri', 'order': 1},
+      {'name': 'Bank Jatim', 'type': PaymentMethodType.bank, 'bankName': 'Bank Jatim', 'order': 2},
+      {'name': 'Bank Jago', 'type': PaymentMethodType.bank, 'bankName': 'Bank Jago', 'order': 3},
+      {'name': 'Dana', 'type': PaymentMethodType.wallet, 'bankName': null, 'order': 4},
+      {'name': 'SEA BANK', 'type': PaymentMethodType.bank, 'bankName': 'SEA BANK', 'order': 5},
     ];
 
-    final batch = _firestore.batch();
-    for (final method in defaults) {
-      final docRef = _getUserPaymentMethodsCollection(userId).doc();
-      batch.set(docRef, {
-        'userId': userId,
-        'name': method['name'],
-        'type': method['type'],
-        'bankName': method['bankName'],
-        'isActive': true,
-        'order': method['order'],
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+    final isOnline = await _connectivity.isOnline();
+
+    if (isOnline) {
+      try {
+        final batch = _firestore.batch();
+        final models = <PaymentMethodModel>[];
+        for (final method in defaults) {
+          final docRef = _getUserPaymentMethodsCollection(userId).doc();
+          batch.set(docRef, {
+            'userId': userId,
+            'name': method['name'],
+            'type': (method['type'] as PaymentMethodType).name,
+            'bankName': method['bankName'],
+            'isActive': true,
+            'order': method['order'],
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          models.add(PaymentMethodModel(
+            id: docRef.id,
+            userId: userId,
+            name: method['name'] as String,
+            type: method['type'] as PaymentMethodType,
+            bankName: method['bankName'] as String?,
+            isActive: true,
+            order: method['order'] as int,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ));
+        }
+        await batch.commit();
+        // Cache ke SQLite setelah Firestore sukses
+        await _cacheToSqlite(userId, models);
+        return;
+      } catch (e) {
+        debugPrint('initializeDefaultPaymentMethods Firestore error: $e');
+      }
     }
-    await batch.commit();
+
+    // Offline → simpan ke SQLite + queue ke Firestore
+    for (int i = 0; i < defaults.length; i++) {
+      final method = defaults[i];
+      final id = 'pm_default_${userId}_$i';
+      final model = PaymentMethodModel(
+        id: id,
+        userId: userId,
+        name: method['name'] as String,
+        type: method['type'] as PaymentMethodType,
+        bankName: method['bankName'] as String?,
+        isActive: true,
+        order: method['order'] as int,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      await _dao.insertOrReplace(model);
+      await _pendingOpsDao.addPendingOperation(
+        operation: 'CREATE',
+        tableName: 'payment_methods',
+        recordId: id.hashCode,
+        data: _toQueueData(model, userId),
+      );
+    }
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   Future<void> _cacheToSqlite(String userId, List<PaymentMethodModel> methods) async {
     try {
-      await _dao.deleteAll(userId);
+      if (methods.isEmpty) return;
+      // Cek dulu mana yang isDeleted=1 (pending permanent delete) — skip mereka
+      final deletedIds = (await _getDeletedIds(userId)).toSet();
+
       for (final m in methods) {
+        // Skip PM yang sedang pending delete offline
+        if (deletedIds.contains(m.id)) continue;
         await _dao.insertOrReplace(m.copyWith(userId: userId));
       }
     } catch (e) {
       debugPrint('PaymentMethodService._cacheToSqlite error: $e');
+    }
+  }
+
+  /// Ambil ID yang isDeleted=1 (pending permanent delete) dari SQLite
+  Future<Set<String>> _getDeletedIds(String userId) async {
+    try {
+      final db = await _dao.getDeletedIds(userId);
+      return db.toSet();
+    } catch (_) {
+      return {};
     }
   }
 

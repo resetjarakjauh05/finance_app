@@ -32,7 +32,7 @@ class BillService {
           debugPrint('BillService.createBill Firestore ERROR: $e');
         }
       }
-      // Queue untuk sync saat online
+      // Queue hanya jika offline atau Firestore gagal
       await _pendingOpsDao.addPendingOperation(
         operation: 'CREATE',
         tableName: 'bills',
@@ -55,12 +55,13 @@ class BillService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
         await _billDao.markAsSynced(bill.id, bill.firebaseDocId!);
-        return;
+        return; // BUG-2 FIX: sukses → skip queue
       } catch (e) {
         debugPrint('BillService.updateBill Firestore error: $e');
+        // Firestore gagal → fall through ke queue
       }
     }
-    // Queue untuk sync saat online
+    // Offline atau Firestore gagal → queue untuk sync nanti
     await _pendingOpsDao.addPendingOperation(
       operation: 'UPDATE',
       tableName: 'bills',
@@ -106,8 +107,20 @@ class BillService {
             debugPrint('getBills skip ${doc.id}: $e');
           }
         }
-        // Cache to SQLite
-        _cacheBillsToSqlite(bills);
+        // Cache to SQLite (await, tidak fire-and-forget)
+        await _cacheBillsToSqlite(bills);
+
+        // Merge data offline yang belum sync ke Firestore
+        final allLocal = await _billDao.getAllByUserId(userId);
+        final unsyncedLocal = allLocal
+            .where((r) => (r['isSynced'] as int? ?? 0) == 0 && r['firebaseDocId'] == null)
+            .map((r) => BillModelExtension.fromSqlite(r))
+            .toList();
+        if (unsyncedLocal.isNotEmpty) {
+          final merged = [...bills, ...unsyncedLocal];
+          merged.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+          return merged;
+        }
         return bills;
       } catch (e) {
         debugPrint('getBills Firestore error, fallback SQLite: $e');

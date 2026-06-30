@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../data/services/payment_method_service.dart';
 import '../../../../data/repositories/payment_method_repository.dart';
 import '../view_models/payment_method_view_model.dart';
@@ -99,6 +100,12 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
       ),
     );
 
+    // Selalu reload setelah kembali dari AddEdit — terlepas sukses/gagal/batal
+    // Fix: jika exception di AddEdit screen, result == null tapi data mungkin sudah berubah
+    if (mounted) {
+      await _viewModel.loadPaymentMethods();
+    }
+
     if (result != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -107,8 +114,6 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
           duration: const Duration(seconds: 2),
         ),
       );
-      // Force reload after add/edit
-      await _viewModel.loadPaymentMethods();
     }
   }
 
@@ -308,18 +313,31 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                       children: [
                         Text(method.type.displayName),
                         if (method.bankName != null)
-                          Text(
-                            method.bankName!,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        if (!method.isActive)
-                          const Text(
-                            'Tidak Aktif',
-                            style: TextStyle(
-                              color: Colors.red,
-                              fontSize: 12,
+                          Text(method.bankName!, style: const TextStyle(fontSize: 12)),
+                        if (method.accountNumber != null && method.accountNumber!.isNotEmpty)
+                          GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: method.accountNumber!));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Nomor ${method.accountNumber} disalin'),
+                                  duration: const Duration(seconds: 1),
+                                ),
+                              );
+                            },
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(method.accountNumber!,
+                                    style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.copy, size: 12, color: Colors.grey),
+                              ],
                             ),
                           ),
+                        if (!method.isActive)
+                          const Text('Tidak Aktif',
+                              style: TextStyle(color: Colors.red, fontSize: 12)),
                       ],
                     ),
                     trailing: PopupMenuButton(

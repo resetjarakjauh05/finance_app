@@ -28,6 +28,11 @@ class PaymentMethodRepository {
     return await _service.getAllPaymentMethods(userId);
   }
 
+  /// Get langsung dari SQLite — bypass Firestore cek koneksi
+  Future<List<PaymentMethodModel>> getLocalPaymentMethods(String userId) async {
+    return await _service.getLocalPaymentMethods(userId);
+  }
+
   /// Get payment method by ID
   Future<PaymentMethodModel?> getPaymentMethodById(
     String userId,

@@ -34,7 +34,7 @@ class CustodyDao {
     if (firebaseDocId.isEmpty) return null;
     final db = await _dbHelper.database;
     final result = await db.query('custody',
-        where: 'firebaseDocId = ? AND isDeleted = 0', whereArgs: [firebaseDocId]);
+        where: 'firebaseDocId = ?', whereArgs: [firebaseDocId]);
     return result.isNotEmpty ? result.first : null;
   }
 

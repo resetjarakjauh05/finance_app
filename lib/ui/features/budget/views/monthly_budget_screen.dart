@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../../domain/models/monthly_budget_model.dart';
 import '../../../../domain/models/category_model.dart';
@@ -237,7 +236,7 @@ class _MonthSelector extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: DropdownButtonFormField<String>(
-        value: availableMonths.contains(selectedMonth) ? selectedMonth : null,
+        initialValue: availableMonths.contains(selectedMonth) ? selectedMonth : null,
         decoration: const InputDecoration(
           labelText: 'Pilih Bulan',
           border: OutlineInputBorder(),
@@ -593,7 +592,7 @@ class _MonthlyBudgetFormScreenState extends State<MonthlyBudgetFormScreen> {
           style: TextStyle(color: Colors.grey));
     }
     return DropdownButtonFormField<CategoryModel>(
-      value: _selectedCategory,
+      initialValue: _selectedCategory,
       decoration: const InputDecoration(
         labelText: 'Pilih Kategori',
         border: OutlineInputBorder(),

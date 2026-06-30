@@ -6,9 +6,8 @@ part of 'transaction_model.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-_$TransactionModelImpl _$$TransactionModelImplFromJson(
-        Map<String, dynamic> json) =>
-    _$TransactionModelImpl(
+_TransactionModel _$TransactionModelFromJson(Map<String, dynamic> json) =>
+    _TransactionModel(
       id: (json['id'] as num).toInt(),
       firebaseDocId: json['firebaseDocId'] as String?,
       userId: json['userId'] as String,
@@ -32,8 +31,7 @@ _$TransactionModelImpl _$$TransactionModelImplFromJson(
       isDeleted: json['isDeleted'] as bool? ?? false,
     );
 
-Map<String, dynamic> _$$TransactionModelImplToJson(
-        _$TransactionModelImpl instance) =>
+Map<String, dynamic> _$TransactionModelToJson(_TransactionModel instance) =>
     <String, dynamic>{
       'id': instance.id,
       'firebaseDocId': instance.firebaseDocId,

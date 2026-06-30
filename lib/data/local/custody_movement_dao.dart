@@ -52,6 +52,16 @@ class CustodyMovementDao {
     return masukTotal - keluarTotal;
   }
 
+  /// Cek apakah ada unsynced movements untuk custody tertentu
+  Future<bool> hasUnsyncedMovements(int custodyId) async {
+    final db = await _dbHelper.database;
+    final result = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM custody_movements WHERE custodyId = ? AND isSynced = 0",
+      [custodyId],
+    );
+    return ((result.first['cnt'] as int?) ?? 0) > 0;
+  }
+
   Future<int> markAsSynced(int id, String firebaseDocId) async {
     final db = await _dbHelper.database;
     return await db.update(

@@ -1,17 +1,21 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../domain/models/category_model.dart';
 import '../services/category_service.dart';
+import '../local/transaction_dao.dart';
 
 /// Repository untuk kategori
 class CategoryRepository {
   final CategoryService _service;
   final Connectivity _connectivity;
+  final TransactionDao _transactionDao;
 
   CategoryRepository({
     required CategoryService service,
     Connectivity? connectivity,
+    TransactionDao? transactionDao,
   })  : _service = service,
-        _connectivity = connectivity ?? Connectivity();
+        _connectivity = connectivity ?? Connectivity(),
+        _transactionDao = transactionDao ?? TransactionDao();
 
   Future<bool> _isOnline() async {
     final result = await _connectivity.checkConnectivity();
@@ -65,10 +69,23 @@ class CategoryRepository {
     await _service.updateCategory(category);
   }
 
+  /// Cek apakah kategori custom sudah dipakai di transaksi
+  Future<bool> isUsedInTransactions(String userId, String categoryId) async {
+    final transactions = await _transactionDao.filterTransactions(
+      userId,
+      categoryId: categoryId,
+    );
+    return transactions.isNotEmpty;
+  }
+
   /// Delete kategori custom
   Future<void> deleteCategory(CategoryModel category) async {
     if (category.isPreset) {
       throw Exception('Kategori preset tidak dapat dihapus');
+    }
+    final used = await isUsedInTransactions(category.userId, category.id);
+    if (used) {
+      throw Exception('Kategori "${category.name}" sudah digunakan dalam transaksi dan tidak dapat dihapus');
     }
     await _service.deleteCategory(category);
   }

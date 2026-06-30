@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../../data/services/transaction_service.dart';
 import '../../../../data/services/payment_method_service.dart';
 import '../../../../data/services/category_service.dart';
@@ -292,7 +291,7 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
                             minimumSize: const Size.fromHeight(48)),
                       )
                     : DropdownButtonFormField<CategoryModel>(
-                        value: _selectedExpenseCategory,
+                        initialValue: _selectedExpenseCategory,
                         decoration: InputDecoration(
                           labelText: _selectedCategory ==
                                   TransactionCategory.expense
@@ -348,8 +347,21 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
               builder: (context, _) {
                 final activeMethods =
                     _viewModel.paymentMethods.where((m) => m.isActive).toList();
+                // Guard: jika selectedId tidak ada di active list → reset null
+                // TAPI hanya jika list sudah terisi (bukan masih loading/kosong)
+                // Bug: list kosong saat loading → reset ID yang valid → dropdown kosong
+                final validId = activeMethods.isEmpty
+                    ? _selectedPaymentMethodId
+                    : activeMethods.any((m) => m.id == _selectedPaymentMethodId)
+                        ? _selectedPaymentMethodId
+                        : null;
+                if (activeMethods.isNotEmpty && validId != _selectedPaymentMethodId) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() => _selectedPaymentMethodId = validId);
+                  });
+                }
                 return DropdownButtonFormField<String>(
-                  value: _selectedPaymentMethodId,
+                  initialValue: validId,
                   decoration: const InputDecoration(
                     labelText: 'Metode Pembayaran',
                     prefixIcon: Icon(Icons.account_balance_wallet_outlined),
