@@ -163,6 +163,18 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
 
     final transferFee =
         ThousandsSeparatorInputFormatter.parseValue(_transferFeeController.text);
+
+    // Tagihan: auto-set dueDate dari billingDay (bulan ini atau depan jika sudah lewat)
+    if (isTagihan) {
+      final now = DateTime.now();
+      final day = _billingDay ?? now.day;
+      var candidate = DateTime(now.year, now.month, day);
+      if (candidate.isBefore(now)) {
+        candidate = DateTime(now.year, now.month + 1, day);
+      }
+      _dueDate = candidate;
+    }
+
     final int? maxInstallments = _hasMaxInstallments &&
             _maxInstallmentsController.text.isNotEmpty
         ? int.tryParse(_maxInstallmentsController.text)
@@ -366,19 +378,21 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Due date / Estimasi
-            InkWell(
-              onTap: _selectDate,
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: _dueDateLabel(),
-                  prefixIcon: const Icon(Icons.calendar_today),
-                  border: const OutlineInputBorder(),
+            // Due date / Estimasi (hanya hutang & piutang)
+            if (!isTagihan) ...[
+              InkWell(
+                onTap: _selectDate,
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: _dueDateLabel(),
+                    prefixIcon: const Icon(Icons.calendar_today),
+                    border: const OutlineInputBorder(),
+                  ),
+                  child: Text(_dateFormat.format(_dueDate)),
                 ),
-                child: Text(_dateFormat.format(_dueDate)),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ],
 
             // Notes
             TextFormField(
