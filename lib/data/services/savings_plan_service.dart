@@ -235,6 +235,30 @@ class SavingsPlanService {
 
     await _allocDao.insert(alloc);
 
+    // Queue ke pending_operations jika offline — agar sync ke Firestore saat online
+    if (!isOnline) {
+      await _pendingOpsDao.addPendingOperation(
+        operation: 'CREATE',
+        tableName: 'savings_allocations',
+        recordId: alloc.id.hashCode,
+        data: {
+          'id': alloc.id,
+          'userId': userId,
+          'savingsPlanId': savingsPlanId,
+          'amount': amount,
+          'notes': notes,
+          'date': alloc.date.toIso8601String(),
+          'fromPaymentMethodId': fromPaymentMethodId,
+          'fromPaymentMethodName': fromPaymentMethodName,
+          'toPaymentMethodId': toPaymentMethodId,
+          'toPaymentMethodName': toPaymentMethodName,
+          'transferFee': transferFee,
+          'isDeleted': false,
+          'createdAt': alloc.localCreatedAt.toIso8601String(),
+        },
+      );
+    }
+
     // BUG-04 FIX: pakai injected _transactionService, bukan instantiate baru
     final totalDebit = amount + transferFee;
     final expenseTx = TransactionModel(
