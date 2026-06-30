@@ -454,17 +454,59 @@ class _BillsScreenState extends State<BillsScreen>
             ],
 
             // Tagihan recurring info
-            if (bill.type == BillType.tagihan && bill.maxInstallments != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '${bill.installmentsPaid}/${bill.maxInstallments} cicilan dibayar',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.grey),
+            if (bill.type == BillType.tagihan) ...[
+              const SizedBox(height: 4),
+              // Indikator sudah bayar bulan ini
+              Builder(builder: (context) {
+                final now = DateTime.now();
+                final paidThisMonth = bill.updatedAt != null &&
+                    bill.updatedAt!.year == now.year &&
+                    bill.updatedAt!.month == now.month &&
+                    bill.installmentsPaid > 0 &&
+                    bill.status != BillStatus.unpaid;
+                if (paidThisMonth) {
+                  return Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: Colors.green.shade200),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle,
+                            size: 12,
+                            color: Colors.green.shade600),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Sudah dibayar bulan ini',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              }),
+              if (bill.maxInstallments != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${bill.installmentsPaid}/${bill.maxInstallments} cicilan dibayar',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.grey),
+                  ),
                 ),
-              ),
+            ],
 
             // Notes
             if (bill.notes != null && bill.notes!.isNotEmpty)

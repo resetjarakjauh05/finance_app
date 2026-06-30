@@ -193,8 +193,8 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
           nominal: ThousandsSeparatorInputFormatter.parseValue(_nominalController.text),
           dueDate: _dueDate,
           type: _selectedType,
-          categoryId: isHutang ? _selectedCategory?.id : null,
-          categoryName: isHutang ? _selectedCategory?.name : null,
+          categoryId: isHutang ? _selectedCategory?.id : isTagihan ? _selectedCategory?.id : null,
+          categoryName: isHutang ? _selectedCategory?.name : isTagihan ? _selectedCategory?.name : null,
           paymentMethodId:
               (isHutang || isPiutang) ? _selectedPaymentMethod?.id : null,
           paymentMethodName:
@@ -504,23 +504,6 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
         onChanged: (v) => setState(() => _selectedPaymentMethod = v),
       ),
     const SizedBox(height: 16),
-
-    // Biaya transfer (jika ada rekening)
-    if (_selectedPaymentMethod != null) ...[
-      TextFormField(
-        controller: _transferFeeController,
-        keyboardType: TextInputType.number,
-        inputFormatters: [ThousandsSeparatorInputFormatter()],
-        decoration: const InputDecoration(
-          labelText: 'Biaya Transfer (opsional)',
-          prefixText: 'Rp ',
-          prefixIcon: Icon(Icons.swap_horiz),
-          border: OutlineInputBorder(),
-          helperText: 'Biaya admin transfer (ikut menambah saldo)',
-        ),
-      ),
-      const SizedBox(height: 16),
-    ],
   ];
 
   List<Widget> _buildPiutangFields() => [
@@ -579,6 +562,32 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
   ];
 
   List<Widget> _buildTagihanFields() => [
+    // Kategori (opsional untuk tagihan)
+    if (_loadingCategories)
+      const Center(child: CircularProgressIndicator())
+    else if (_categories.isNotEmpty) ...[
+      DropdownButtonFormField<CategoryModel?>(
+        initialValue: _selectedCategory,
+        decoration: const InputDecoration(
+          labelText: 'Kategori (opsional)',
+          prefixIcon: Icon(Icons.category_outlined),
+          border: OutlineInputBorder(),
+        ),
+        items: [
+          const DropdownMenuItem<CategoryModel?>(
+            value: null,
+            child: Text('— Tanpa kategori —'),
+          ),
+          ..._categories.map((cat) => DropdownMenuItem(
+                value: cat,
+                child: Text('${cat.icon} ${cat.name}'),
+              )),
+        ],
+        onChanged: (v) => setState(() => _selectedCategory = v),
+      ),
+      const SizedBox(height: 16),
+    ],
+
     // Tanggal tagih per bulan
     Row(
       children: [
