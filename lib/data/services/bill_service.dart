@@ -239,6 +239,7 @@ class BillService {
     'maxInstallments': b.maxInstallments,
     'installmentAmount': b.installmentAmount,
     'installmentsPaid': b.installmentsPaid,
+    'updatedAt': b.updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     'createdAt': DateTime.now().toIso8601String(),
   };
 }
