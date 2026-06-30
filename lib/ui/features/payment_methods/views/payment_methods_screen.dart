@@ -34,6 +34,9 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
 
   bool _firstLoadDone = false;
 
+  // Filter: 0=Semua, 1=Aktif, 2=Non-aktif
+  int _filterIndex = 0;
+
   void _onFirstLoad() {
     if (_firstLoadDone) return;
     if (_viewModel.isLoading) return;
@@ -281,12 +284,68 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
             );
           }
 
-          return RefreshIndicator(
-            onRefresh: _loadData,
-            child: ListView.builder(
-              itemCount: _viewModel.paymentMethods.length,
-              itemBuilder: (context, index) {
-                final method = _viewModel.paymentMethods[index];
+          return Column(
+            children: [
+              // Filter chips
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('Semua'),
+                      selected: _filterIndex == 0,
+                      onSelected: (_) => setState(() => _filterIndex = 0),
+                      showCheckmark: false,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    FilterChip(
+                      label: const Text('Aktif'),
+                      selected: _filterIndex == 1,
+                      onSelected: (_) => setState(() => _filterIndex = 1),
+                      showCheckmark: false,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    FilterChip(
+                      label: const Text('Non-aktif'),
+                      selected: _filterIndex == 2,
+                      onSelected: (_) => setState(() => _filterIndex = 2),
+                      showCheckmark: false,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _loadData,
+                  child: Builder(builder: (context) {
+                    final filtered = switch (_filterIndex) {
+                      1 => _viewModel.paymentMethods.where((m) => m.isActive).toList(),
+                      2 => _viewModel.paymentMethods.where((m) => !m.isActive).toList(),
+                      _ => _viewModel.paymentMethods,
+                    };
+                    if (filtered.isEmpty) {
+                      return Center(
+                        child: Text(
+                          _filterIndex == 1
+                              ? 'Tidak ada rekening aktif'
+                              : _filterIndex == 2
+                                  ? 'Tidak ada rekening non-aktif'
+                                  : 'Belum ada metode pembayaran',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(color: Colors.grey),
+                        ),
+                      );
+                    }
+                    return ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final method = filtered[index];
                 return Card(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -377,8 +436,11 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                   ),
                 );
               },
-            ),
-          );
+            );
+          }),
+        ),
+      ],
+    );
         },
       ),
       floatingActionButton: FloatingActionButton.extended(

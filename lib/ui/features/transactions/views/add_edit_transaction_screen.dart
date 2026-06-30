@@ -347,15 +347,17 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
               builder: (context, _) {
                 final activeMethods =
                     _viewModel.paymentMethods.where((m) => m.isActive).toList();
-                // Guard: jika selectedId tidak ada di active list → reset null
-                // TAPI hanya jika list sudah terisi (bukan masih loading/kosong)
-                // Bug: list kosong saat loading → reset ID yang valid → dropdown kosong
-                final validId = activeMethods.isEmpty
+                // Edit mode: tampilkan semua rekening (aktif + non-aktif) agar data tidak rusak
+                // Create mode: hanya aktif
+                final displayMethods = isEditMode
+                    ? _viewModel.paymentMethods
+                    : activeMethods;
+                final validId = displayMethods.isEmpty
                     ? _selectedPaymentMethodId
-                    : activeMethods.any((m) => m.id == _selectedPaymentMethodId)
+                    : displayMethods.any((m) => m.id == _selectedPaymentMethodId)
                         ? _selectedPaymentMethodId
                         : null;
-                if (activeMethods.isNotEmpty && validId != _selectedPaymentMethodId) {
+                if (displayMethods.isNotEmpty && validId != _selectedPaymentMethodId) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted) setState(() => _selectedPaymentMethodId = validId);
                   });
@@ -367,10 +369,17 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
                     prefixIcon: Icon(Icons.account_balance_wallet_outlined),
                     border: OutlineInputBorder(),
                   ),
-                  items: activeMethods
+                  items: displayMethods
                       .map((method) => DropdownMenuItem(
                             value: method.id,
-                            child: Text(method.name),
+                            child: Text(
+                              method.isActive
+                                  ? method.name
+                                  : '${method.name} (Non-aktif)',
+                              style: TextStyle(
+                                color: method.isActive ? null : Colors.grey,
+                              ),
+                            ),
                           ))
                       .toList(),
                   onChanged: (value) =>
