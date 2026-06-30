@@ -940,26 +940,55 @@ class _SavingsAllocationFormScreenState
               ),
               const SizedBox(height: 12),
 
-              DropdownButtonFormField<PaymentMethodModel?>(
-                initialValue: _toMethod,
-                decoration: const InputDecoration(
-                  labelText: 'Simpan di Rekening (Opsional)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.savings_outlined),
-                  helperText: 'Kosongkan jika rekening sama / tidak tracking',
-                ),
-                items: [
-                  const DropdownMenuItem<PaymentMethodModel?>(
-                    value: null,
-                    child: Text('— Tidak tracking —'),
+              // Rekening Simpan — hanya tampil jika plan belum punya rekening khusus
+              if (widget.plan.savingsPaymentMethodId != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
                   ),
-                  ..._paymentMethods.map((m) => DropdownMenuItem(
-                    value: m,
-                    child: Text(m.name),
-                  )),
-                ],
-                onChanged: (v) => setState(() => _toMethod = v),
-              ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.savings_outlined, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Disimpan ke Rekening',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(color: Colors.grey)),
+                            Text(widget.plan.savingsPaymentMethodName ?? '',
+                                style: const TextStyle(fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                DropdownButtonFormField<PaymentMethodModel?>(
+                  initialValue: _toMethod,
+                  decoration: const InputDecoration(
+                    labelText: 'Simpan di Rekening (Opsional)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.savings_outlined),
+                    helperText: 'Kosongkan jika rekening sama / tidak tracking',
+                  ),
+                  items: [
+                    const DropdownMenuItem<PaymentMethodModel?>(
+                      value: null,
+                      child: Text('— Tidak tracking —'),
+                    ),
+                    ..._paymentMethods.map((m) => DropdownMenuItem(
+                      value: m,
+                      child: Text(m.name),
+                    )),
+                  ],
+                  onChanged: (v) => setState(() => _toMethod = v),
+                ),
               const SizedBox(height: 12),
 
               // Biaya Transfer (opsional)
