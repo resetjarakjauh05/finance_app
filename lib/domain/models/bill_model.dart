@@ -82,6 +82,11 @@ abstract class BillModel with _$BillModel {
     String? categoryId,
     String? categoryName,
     String? notes,
+    // Field piutang: rekening yang didebit saat memberi pinjaman
+    String? paymentMethodId,
+    String? paymentMethodName,
+    // Biaya transfer saat create piutang atau saat bayar
+    @Default(0) int transferFee,
     @Default(false) bool isSynced,
     DateTime? syncedAt,
     required DateTime localCreatedAt,
@@ -127,6 +132,9 @@ extension BillModelExtension on BillModel {
       'categoryId': categoryId,
       'categoryName': categoryName,
       'notes': notes,
+      'paymentMethodId': paymentMethodId,
+      'paymentMethodName': paymentMethodName,
+      'transferFee': transferFee,
       'isSynced': isSynced ? 1 : 0,
       'syncedAt': syncedAt?.millisecondsSinceEpoch,
       'localCreatedAt': localCreatedAt.millisecondsSinceEpoch,
@@ -150,6 +158,9 @@ extension BillModelExtension on BillModel {
       categoryId: map['categoryId'] as String?,
       categoryName: map['categoryName'] as String?,
       notes: map['notes'] as String?,
+      paymentMethodId: map['paymentMethodId'] as String?,
+      paymentMethodName: map['paymentMethodName'] as String?,
+      transferFee: (map['transferFee'] as int?) ?? 0,
       isSynced: (map['isSynced'] as int) == 1,
       syncedAt: map['syncedAt'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['syncedAt'] as int)

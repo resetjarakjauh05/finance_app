@@ -32,12 +32,17 @@ class BillRepository {
     String? category,
     String? categoryId,
     String? categoryName,
+    PaymentMethodModel? paymentMethod,
+    int transferFee = 0,
     String? notes,
   }) async {
     if (name.trim().isEmpty) throw Exception('Nama tagihan tidak boleh kosong');
     if (nominal <= 0) throw Exception('Nominal harus lebih dari 0');
     if (type == BillType.hutang && categoryId == null) {
       throw Exception('Kategori wajib dipilih untuk hutang');
+    }
+    if (type == BillType.piutang && paymentMethod == null) {
+      throw Exception('Pilih rekening untuk piutang');
     }
 
     final isOnline = await _isOnline();
@@ -53,11 +58,38 @@ class BillRepository {
       category: category?.trim(),
       categoryId: categoryId,
       categoryName: categoryName,
+      paymentMethodId: type == BillType.piutang ? paymentMethod?.id : null,
+      paymentMethodName: type == BillType.piutang ? paymentMethod?.name : null,
+      transferFee: type == BillType.piutang ? transferFee : 0,
       notes: notes?.trim(),
       localCreatedAt: DateTime.now(),
     );
     final localId = await _service.createBill(bill, isOnline);
-    return bill.copyWith(id: localId);
+    final savedBill = bill.copyWith(id: localId);
+
+    // Piutang → auto-debit saldo rekening (kita memberi pinjaman ke orang)
+    if (type == BillType.piutang && paymentMethod != null) {
+      final debitAmount = nominal + transferFee;
+      final transaction = TransactionModel(
+        id: 0,
+        userId: userId,
+        description: 'Piutang: ${name.trim()}',
+        category: TransactionCategory.expense,
+        paymentMethodId: paymentMethod.id,
+        paymentMethodName: paymentMethod.name,
+        nominal: debitAmount,
+        date: DateTime.now(),
+        notes: transferFee > 0
+            ? 'Memberi pinjaman: ${name.trim()} (termasuk biaya transfer)'
+            : 'Memberi pinjaman: ${name.trim()}',
+        categoryId: null,
+        categoryName: 'Piutang',
+        localCreatedAt: DateTime.now(),
+      );
+      await _transactionService.createTransaction(transaction, isOnline);
+    }
+
+    return savedBill;
   }
 
   Future<void> updateBill(BillModel bill) async {
@@ -71,8 +103,9 @@ class BillRepository {
   Future<void> payBill(
     BillModel bill,
     int payAmount,
-    PaymentMethodModel paymentMethod,
-  ) async {
+    PaymentMethodModel paymentMethod, {
+    int transferFee = 0,
+  }) async {
     if (payAmount <= 0) throw Exception('Nominal bayar harus lebih dari 0');
 
     final newPaid = (bill.paidAmount + payAmount).clamp(0, bill.nominal);
@@ -93,11 +126,9 @@ class BillRepository {
         ? TransactionCategory.expense
         : TransactionCategory.income;
 
-    // BUG-05 FIX: piutang = income, tidak butuh categoryId (validasi hanya untuk expense)
-    // categoryId hanya wajib untuk expense di TransactionRepository.createTransaction
     final txCategoryId = category == TransactionCategory.expense
-        ? (bill.categoryId ?? 'uncategorized') // hutang pasti punya categoryId (validasi di createBill)
-        : null; // piutang = income, tidak perlu categoryId
+        ? (bill.categoryId ?? 'uncategorized')
+        : null;
     final txCategoryName = category == TransactionCategory.expense
         ? (bill.categoryName ?? 'Lainnya')
         : null;
@@ -111,13 +142,33 @@ class BillRepository {
       paymentMethodName: paymentMethod.name,
       nominal: payAmount,
       date: DateTime.now(),
-      notes: 'Pembayaran tagihan: ${bill.name}',
+      notes: transferFee > 0
+          ? 'Pembayaran tagihan: ${bill.name} (biaya transfer: Rp $transferFee)'
+          : 'Pembayaran tagihan: ${bill.name}',
       categoryId: txCategoryId,
       categoryName: txCategoryName,
       localCreatedAt: DateTime.now(),
     );
-
     await _transactionService.createTransaction(transaction, isOnline);
+
+    // Biaya transfer → expense terpisah
+    if (transferFee > 0) {
+      final feeTransaction = TransactionModel(
+        id: 0,
+        userId: bill.userId,
+        description: 'Biaya transfer: ${bill.name}',
+        category: TransactionCategory.expense,
+        paymentMethodId: paymentMethod.id,
+        paymentMethodName: paymentMethod.name,
+        nominal: transferFee,
+        date: DateTime.now(),
+        notes: 'Biaya transfer pembayaran tagihan: ${bill.name}',
+        categoryId: 'uncategorized',
+        categoryName: 'Biaya Transfer',
+        localCreatedAt: DateTime.now(),
+      );
+      await _transactionService.createTransaction(feeTransaction, isOnline);
+    }
   }
 
   Future<void> deleteBill(BillModel bill) async {

@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$BillModel {
 
- int get id; String? get firebaseDocId; String get userId; String get name; int get nominal; int get paidAmount; DateTime get dueDate; BillStatus get status; BillType get type; String? get category; String? get categoryId; String? get categoryName; String? get notes; bool get isSynced; DateTime? get syncedAt; DateTime get localCreatedAt; DateTime? get updatedAt; bool get isDeleted;
+ int get id; String? get firebaseDocId; String get userId; String get name; int get nominal; int get paidAmount; DateTime get dueDate; BillStatus get status; BillType get type; String? get category; String? get categoryId; String? get categoryName; String? get notes; String? get paymentMethodId; String? get paymentMethodName; int get transferFee; bool get isSynced; DateTime? get syncedAt; DateTime get localCreatedAt; DateTime? get updatedAt; bool get isDeleted;
 /// Create a copy of BillModel
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $BillModelCopyWith<BillModel> get copyWith => _$BillModelCopyWithImpl<BillModel>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is BillModel&&(identical(other.id, id) || other.id == id)&&(identical(other.firebaseDocId, firebaseDocId) || other.firebaseDocId == firebaseDocId)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.name, name) || other.name == name)&&(identical(other.nominal, nominal) || other.nominal == nominal)&&(identical(other.paidAmount, paidAmount) || other.paidAmount == paidAmount)&&(identical(other.dueDate, dueDate) || other.dueDate == dueDate)&&(identical(other.status, status) || other.status == status)&&(identical(other.type, type) || other.type == type)&&(identical(other.category, category) || other.category == category)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&(identical(other.categoryName, categoryName) || other.categoryName == categoryName)&&(identical(other.notes, notes) || other.notes == notes)&&(identical(other.isSynced, isSynced) || other.isSynced == isSynced)&&(identical(other.syncedAt, syncedAt) || other.syncedAt == syncedAt)&&(identical(other.localCreatedAt, localCreatedAt) || other.localCreatedAt == localCreatedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.isDeleted, isDeleted) || other.isDeleted == isDeleted));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is BillModel&&(identical(other.id, id) || other.id == id)&&(identical(other.firebaseDocId, firebaseDocId) || other.firebaseDocId == firebaseDocId)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.name, name) || other.name == name)&&(identical(other.nominal, nominal) || other.nominal == nominal)&&(identical(other.paidAmount, paidAmount) || other.paidAmount == paidAmount)&&(identical(other.dueDate, dueDate) || other.dueDate == dueDate)&&(identical(other.status, status) || other.status == status)&&(identical(other.type, type) || other.type == type)&&(identical(other.category, category) || other.category == category)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&(identical(other.categoryName, categoryName) || other.categoryName == categoryName)&&(identical(other.notes, notes) || other.notes == notes)&&(identical(other.paymentMethodId, paymentMethodId) || other.paymentMethodId == paymentMethodId)&&(identical(other.paymentMethodName, paymentMethodName) || other.paymentMethodName == paymentMethodName)&&(identical(other.transferFee, transferFee) || other.transferFee == transferFee)&&(identical(other.isSynced, isSynced) || other.isSynced == isSynced)&&(identical(other.syncedAt, syncedAt) || other.syncedAt == syncedAt)&&(identical(other.localCreatedAt, localCreatedAt) || other.localCreatedAt == localCreatedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.isDeleted, isDeleted) || other.isDeleted == isDeleted));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,firebaseDocId,userId,name,nominal,paidAmount,dueDate,status,type,category,categoryId,categoryName,notes,isSynced,syncedAt,localCreatedAt,updatedAt,isDeleted);
+int get hashCode => Object.hashAll([runtimeType,id,firebaseDocId,userId,name,nominal,paidAmount,dueDate,status,type,category,categoryId,categoryName,notes,paymentMethodId,paymentMethodName,transferFee,isSynced,syncedAt,localCreatedAt,updatedAt,isDeleted]);
 
 @override
 String toString() {
-  return 'BillModel(id: $id, firebaseDocId: $firebaseDocId, userId: $userId, name: $name, nominal: $nominal, paidAmount: $paidAmount, dueDate: $dueDate, status: $status, type: $type, category: $category, categoryId: $categoryId, categoryName: $categoryName, notes: $notes, isSynced: $isSynced, syncedAt: $syncedAt, localCreatedAt: $localCreatedAt, updatedAt: $updatedAt, isDeleted: $isDeleted)';
+  return 'BillModel(id: $id, firebaseDocId: $firebaseDocId, userId: $userId, name: $name, nominal: $nominal, paidAmount: $paidAmount, dueDate: $dueDate, status: $status, type: $type, category: $category, categoryId: $categoryId, categoryName: $categoryName, notes: $notes, paymentMethodId: $paymentMethodId, paymentMethodName: $paymentMethodName, transferFee: $transferFee, isSynced: $isSynced, syncedAt: $syncedAt, localCreatedAt: $localCreatedAt, updatedAt: $updatedAt, isDeleted: $isDeleted)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $BillModelCopyWith<$Res>  {
   factory $BillModelCopyWith(BillModel value, $Res Function(BillModel) _then) = _$BillModelCopyWithImpl;
 @useResult
 $Res call({
- int id, String? firebaseDocId, String userId, String name, int nominal, int paidAmount, DateTime dueDate, BillStatus status, BillType type, String? category, String? categoryId, String? categoryName, String? notes, bool isSynced, DateTime? syncedAt, DateTime localCreatedAt, DateTime? updatedAt, bool isDeleted
+ int id, String? firebaseDocId, String userId, String name, int nominal, int paidAmount, DateTime dueDate, BillStatus status, BillType type, String? category, String? categoryId, String? categoryName, String? notes, String? paymentMethodId, String? paymentMethodName, int transferFee, bool isSynced, DateTime? syncedAt, DateTime localCreatedAt, DateTime? updatedAt, bool isDeleted
 });
 
 
@@ -65,7 +65,7 @@ class _$BillModelCopyWithImpl<$Res>
 
 /// Create a copy of BillModel
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? firebaseDocId = freezed,Object? userId = null,Object? name = null,Object? nominal = null,Object? paidAmount = null,Object? dueDate = null,Object? status = null,Object? type = null,Object? category = freezed,Object? categoryId = freezed,Object? categoryName = freezed,Object? notes = freezed,Object? isSynced = null,Object? syncedAt = freezed,Object? localCreatedAt = null,Object? updatedAt = freezed,Object? isDeleted = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? firebaseDocId = freezed,Object? userId = null,Object? name = null,Object? nominal = null,Object? paidAmount = null,Object? dueDate = null,Object? status = null,Object? type = null,Object? category = freezed,Object? categoryId = freezed,Object? categoryName = freezed,Object? notes = freezed,Object? paymentMethodId = freezed,Object? paymentMethodName = freezed,Object? transferFee = null,Object? isSynced = null,Object? syncedAt = freezed,Object? localCreatedAt = null,Object? updatedAt = freezed,Object? isDeleted = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,firebaseDocId: freezed == firebaseDocId ? _self.firebaseDocId : firebaseDocId // ignore: cast_nullable_to_non_nullable
@@ -80,7 +80,10 @@ as BillType,category: freezed == category ? _self.category : category // ignore:
 as String?,categoryId: freezed == categoryId ? _self.categoryId : categoryId // ignore: cast_nullable_to_non_nullable
 as String?,categoryName: freezed == categoryName ? _self.categoryName : categoryName // ignore: cast_nullable_to_non_nullable
 as String?,notes: freezed == notes ? _self.notes : notes // ignore: cast_nullable_to_non_nullable
-as String?,isSynced: null == isSynced ? _self.isSynced : isSynced // ignore: cast_nullable_to_non_nullable
+as String?,paymentMethodId: freezed == paymentMethodId ? _self.paymentMethodId : paymentMethodId // ignore: cast_nullable_to_non_nullable
+as String?,paymentMethodName: freezed == paymentMethodName ? _self.paymentMethodName : paymentMethodName // ignore: cast_nullable_to_non_nullable
+as String?,transferFee: null == transferFee ? _self.transferFee : transferFee // ignore: cast_nullable_to_non_nullable
+as int,isSynced: null == isSynced ? _self.isSynced : isSynced // ignore: cast_nullable_to_non_nullable
 as bool,syncedAt: freezed == syncedAt ? _self.syncedAt : syncedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,localCreatedAt: null == localCreatedAt ? _self.localCreatedAt : localCreatedAt // ignore: cast_nullable_to_non_nullable
 as DateTime,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
@@ -170,10 +173,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id,  String? firebaseDocId,  String userId,  String name,  int nominal,  int paidAmount,  DateTime dueDate,  BillStatus status,  BillType type,  String? category,  String? categoryId,  String? categoryName,  String? notes,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id,  String? firebaseDocId,  String userId,  String name,  int nominal,  int paidAmount,  DateTime dueDate,  BillStatus status,  BillType type,  String? category,  String? categoryId,  String? categoryName,  String? notes,  String? paymentMethodId,  String? paymentMethodName,  int transferFee,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _BillModel() when $default != null:
-return $default(_that.id,_that.firebaseDocId,_that.userId,_that.name,_that.nominal,_that.paidAmount,_that.dueDate,_that.status,_that.type,_that.category,_that.categoryId,_that.categoryName,_that.notes,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
+return $default(_that.id,_that.firebaseDocId,_that.userId,_that.name,_that.nominal,_that.paidAmount,_that.dueDate,_that.status,_that.type,_that.category,_that.categoryId,_that.categoryName,_that.notes,_that.paymentMethodId,_that.paymentMethodName,_that.transferFee,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
   return orElse();
 
 }
@@ -191,10 +194,10 @@ return $default(_that.id,_that.firebaseDocId,_that.userId,_that.name,_that.nomin
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id,  String? firebaseDocId,  String userId,  String name,  int nominal,  int paidAmount,  DateTime dueDate,  BillStatus status,  BillType type,  String? category,  String? categoryId,  String? categoryName,  String? notes,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id,  String? firebaseDocId,  String userId,  String name,  int nominal,  int paidAmount,  DateTime dueDate,  BillStatus status,  BillType type,  String? category,  String? categoryId,  String? categoryName,  String? notes,  String? paymentMethodId,  String? paymentMethodName,  int transferFee,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)  $default,) {final _that = this;
 switch (_that) {
 case _BillModel():
-return $default(_that.id,_that.firebaseDocId,_that.userId,_that.name,_that.nominal,_that.paidAmount,_that.dueDate,_that.status,_that.type,_that.category,_that.categoryId,_that.categoryName,_that.notes,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
+return $default(_that.id,_that.firebaseDocId,_that.userId,_that.name,_that.nominal,_that.paidAmount,_that.dueDate,_that.status,_that.type,_that.category,_that.categoryId,_that.categoryName,_that.notes,_that.paymentMethodId,_that.paymentMethodName,_that.transferFee,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -211,10 +214,10 @@ return $default(_that.id,_that.firebaseDocId,_that.userId,_that.name,_that.nomin
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id,  String? firebaseDocId,  String userId,  String name,  int nominal,  int paidAmount,  DateTime dueDate,  BillStatus status,  BillType type,  String? category,  String? categoryId,  String? categoryName,  String? notes,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id,  String? firebaseDocId,  String userId,  String name,  int nominal,  int paidAmount,  DateTime dueDate,  BillStatus status,  BillType type,  String? category,  String? categoryId,  String? categoryName,  String? notes,  String? paymentMethodId,  String? paymentMethodName,  int transferFee,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)?  $default,) {final _that = this;
 switch (_that) {
 case _BillModel() when $default != null:
-return $default(_that.id,_that.firebaseDocId,_that.userId,_that.name,_that.nominal,_that.paidAmount,_that.dueDate,_that.status,_that.type,_that.category,_that.categoryId,_that.categoryName,_that.notes,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
+return $default(_that.id,_that.firebaseDocId,_that.userId,_that.name,_that.nominal,_that.paidAmount,_that.dueDate,_that.status,_that.type,_that.category,_that.categoryId,_that.categoryName,_that.notes,_that.paymentMethodId,_that.paymentMethodName,_that.transferFee,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
   return null;
 
 }
@@ -226,7 +229,7 @@ return $default(_that.id,_that.firebaseDocId,_that.userId,_that.name,_that.nomin
 @JsonSerializable()
 
 class _BillModel implements BillModel {
-  const _BillModel({required this.id, this.firebaseDocId, required this.userId, required this.name, required this.nominal, this.paidAmount = 0, required this.dueDate, required this.status, this.type = BillType.hutang, this.category, this.categoryId, this.categoryName, this.notes, this.isSynced = false, this.syncedAt, required this.localCreatedAt, this.updatedAt, this.isDeleted = false});
+  const _BillModel({required this.id, this.firebaseDocId, required this.userId, required this.name, required this.nominal, this.paidAmount = 0, required this.dueDate, required this.status, this.type = BillType.hutang, this.category, this.categoryId, this.categoryName, this.notes, this.paymentMethodId, this.paymentMethodName, this.transferFee = 0, this.isSynced = false, this.syncedAt, required this.localCreatedAt, this.updatedAt, this.isDeleted = false});
   factory _BillModel.fromJson(Map<String, dynamic> json) => _$BillModelFromJson(json);
 
 @override final  int id;
@@ -242,6 +245,9 @@ class _BillModel implements BillModel {
 @override final  String? categoryId;
 @override final  String? categoryName;
 @override final  String? notes;
+@override final  String? paymentMethodId;
+@override final  String? paymentMethodName;
+@override@JsonKey() final  int transferFee;
 @override@JsonKey() final  bool isSynced;
 @override final  DateTime? syncedAt;
 @override final  DateTime localCreatedAt;
@@ -261,16 +267,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _BillModel&&(identical(other.id, id) || other.id == id)&&(identical(other.firebaseDocId, firebaseDocId) || other.firebaseDocId == firebaseDocId)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.name, name) || other.name == name)&&(identical(other.nominal, nominal) || other.nominal == nominal)&&(identical(other.paidAmount, paidAmount) || other.paidAmount == paidAmount)&&(identical(other.dueDate, dueDate) || other.dueDate == dueDate)&&(identical(other.status, status) || other.status == status)&&(identical(other.type, type) || other.type == type)&&(identical(other.category, category) || other.category == category)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&(identical(other.categoryName, categoryName) || other.categoryName == categoryName)&&(identical(other.notes, notes) || other.notes == notes)&&(identical(other.isSynced, isSynced) || other.isSynced == isSynced)&&(identical(other.syncedAt, syncedAt) || other.syncedAt == syncedAt)&&(identical(other.localCreatedAt, localCreatedAt) || other.localCreatedAt == localCreatedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.isDeleted, isDeleted) || other.isDeleted == isDeleted));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _BillModel&&(identical(other.id, id) || other.id == id)&&(identical(other.firebaseDocId, firebaseDocId) || other.firebaseDocId == firebaseDocId)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.name, name) || other.name == name)&&(identical(other.nominal, nominal) || other.nominal == nominal)&&(identical(other.paidAmount, paidAmount) || other.paidAmount == paidAmount)&&(identical(other.dueDate, dueDate) || other.dueDate == dueDate)&&(identical(other.status, status) || other.status == status)&&(identical(other.type, type) || other.type == type)&&(identical(other.category, category) || other.category == category)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&(identical(other.categoryName, categoryName) || other.categoryName == categoryName)&&(identical(other.notes, notes) || other.notes == notes)&&(identical(other.paymentMethodId, paymentMethodId) || other.paymentMethodId == paymentMethodId)&&(identical(other.paymentMethodName, paymentMethodName) || other.paymentMethodName == paymentMethodName)&&(identical(other.transferFee, transferFee) || other.transferFee == transferFee)&&(identical(other.isSynced, isSynced) || other.isSynced == isSynced)&&(identical(other.syncedAt, syncedAt) || other.syncedAt == syncedAt)&&(identical(other.localCreatedAt, localCreatedAt) || other.localCreatedAt == localCreatedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.isDeleted, isDeleted) || other.isDeleted == isDeleted));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,firebaseDocId,userId,name,nominal,paidAmount,dueDate,status,type,category,categoryId,categoryName,notes,isSynced,syncedAt,localCreatedAt,updatedAt,isDeleted);
+int get hashCode => Object.hashAll([runtimeType,id,firebaseDocId,userId,name,nominal,paidAmount,dueDate,status,type,category,categoryId,categoryName,notes,paymentMethodId,paymentMethodName,transferFee,isSynced,syncedAt,localCreatedAt,updatedAt,isDeleted]);
 
 @override
 String toString() {
-  return 'BillModel(id: $id, firebaseDocId: $firebaseDocId, userId: $userId, name: $name, nominal: $nominal, paidAmount: $paidAmount, dueDate: $dueDate, status: $status, type: $type, category: $category, categoryId: $categoryId, categoryName: $categoryName, notes: $notes, isSynced: $isSynced, syncedAt: $syncedAt, localCreatedAt: $localCreatedAt, updatedAt: $updatedAt, isDeleted: $isDeleted)';
+  return 'BillModel(id: $id, firebaseDocId: $firebaseDocId, userId: $userId, name: $name, nominal: $nominal, paidAmount: $paidAmount, dueDate: $dueDate, status: $status, type: $type, category: $category, categoryId: $categoryId, categoryName: $categoryName, notes: $notes, paymentMethodId: $paymentMethodId, paymentMethodName: $paymentMethodName, transferFee: $transferFee, isSynced: $isSynced, syncedAt: $syncedAt, localCreatedAt: $localCreatedAt, updatedAt: $updatedAt, isDeleted: $isDeleted)';
 }
 
 
@@ -281,7 +287,7 @@ abstract mixin class _$BillModelCopyWith<$Res> implements $BillModelCopyWith<$Re
   factory _$BillModelCopyWith(_BillModel value, $Res Function(_BillModel) _then) = __$BillModelCopyWithImpl;
 @override @useResult
 $Res call({
- int id, String? firebaseDocId, String userId, String name, int nominal, int paidAmount, DateTime dueDate, BillStatus status, BillType type, String? category, String? categoryId, String? categoryName, String? notes, bool isSynced, DateTime? syncedAt, DateTime localCreatedAt, DateTime? updatedAt, bool isDeleted
+ int id, String? firebaseDocId, String userId, String name, int nominal, int paidAmount, DateTime dueDate, BillStatus status, BillType type, String? category, String? categoryId, String? categoryName, String? notes, String? paymentMethodId, String? paymentMethodName, int transferFee, bool isSynced, DateTime? syncedAt, DateTime localCreatedAt, DateTime? updatedAt, bool isDeleted
 });
 
 
@@ -298,7 +304,7 @@ class __$BillModelCopyWithImpl<$Res>
 
 /// Create a copy of BillModel
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? firebaseDocId = freezed,Object? userId = null,Object? name = null,Object? nominal = null,Object? paidAmount = null,Object? dueDate = null,Object? status = null,Object? type = null,Object? category = freezed,Object? categoryId = freezed,Object? categoryName = freezed,Object? notes = freezed,Object? isSynced = null,Object? syncedAt = freezed,Object? localCreatedAt = null,Object? updatedAt = freezed,Object? isDeleted = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? firebaseDocId = freezed,Object? userId = null,Object? name = null,Object? nominal = null,Object? paidAmount = null,Object? dueDate = null,Object? status = null,Object? type = null,Object? category = freezed,Object? categoryId = freezed,Object? categoryName = freezed,Object? notes = freezed,Object? paymentMethodId = freezed,Object? paymentMethodName = freezed,Object? transferFee = null,Object? isSynced = null,Object? syncedAt = freezed,Object? localCreatedAt = null,Object? updatedAt = freezed,Object? isDeleted = null,}) {
   return _then(_BillModel(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,firebaseDocId: freezed == firebaseDocId ? _self.firebaseDocId : firebaseDocId // ignore: cast_nullable_to_non_nullable
@@ -313,7 +319,10 @@ as BillType,category: freezed == category ? _self.category : category // ignore:
 as String?,categoryId: freezed == categoryId ? _self.categoryId : categoryId // ignore: cast_nullable_to_non_nullable
 as String?,categoryName: freezed == categoryName ? _self.categoryName : categoryName // ignore: cast_nullable_to_non_nullable
 as String?,notes: freezed == notes ? _self.notes : notes // ignore: cast_nullable_to_non_nullable
-as String?,isSynced: null == isSynced ? _self.isSynced : isSynced // ignore: cast_nullable_to_non_nullable
+as String?,paymentMethodId: freezed == paymentMethodId ? _self.paymentMethodId : paymentMethodId // ignore: cast_nullable_to_non_nullable
+as String?,paymentMethodName: freezed == paymentMethodName ? _self.paymentMethodName : paymentMethodName // ignore: cast_nullable_to_non_nullable
+as String?,transferFee: null == transferFee ? _self.transferFee : transferFee // ignore: cast_nullable_to_non_nullable
+as int,isSynced: null == isSynced ? _self.isSynced : isSynced // ignore: cast_nullable_to_non_nullable
 as bool,syncedAt: freezed == syncedAt ? _self.syncedAt : syncedAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,localCreatedAt: null == localCreatedAt ? _self.localCreatedAt : localCreatedAt // ignore: cast_nullable_to_non_nullable
 as DateTime,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable

@@ -147,6 +147,9 @@ class BillService {
       categoryId: data['categoryId'] as String?,
       categoryName: data['categoryName'] as String?,
       notes: data['notes'] as String?,
+      paymentMethodId: data['paymentMethodId'] as String?,
+      paymentMethodName: data['paymentMethodName'] as String?,
+      transferFee: (data['transferFee'] as num?)?.toInt() ?? 0,
       isSynced: true,
       syncedAt: DateTime.now(),
       localCreatedAt: data['createdAt'] != null
@@ -166,8 +169,16 @@ class BillService {
           final localId = await _billDao.insert(b.toSqlite());
           await _billDao.markAsSynced(localId, b.firebaseDocId!);
         } else {
-          // BUG-06 FIX: update existing agar tidak stale (data dari device lain)
           final localId = existing['id'] as int;
+          final isLocalUnsynced = (existing['isSynced'] as int? ?? 0) == 0;
+          if (isLocalUnsynced) {
+            // Record lokal belum sync ke Firestore (bayar offline, dll)
+            // → skip overwrite agar paidAmount/status lokal tidak hilang.
+            // SyncEngine akan push data lokal ke Firestore saat online.
+            debugPrint('_cacheBillsToSqlite: skip overwrite localId=$localId (unsynced local)');
+            continue;
+          }
+          // Record sudah synced → aman di-overwrite dengan data Firestore terbaru
           await _billDao.update(localId, b.copyWith(id: localId).toSqlite());
           await _billDao.markAsSynced(localId, b.firebaseDocId!);
         }
@@ -189,6 +200,9 @@ class BillService {
     'categoryId': b.categoryId,
     'categoryName': b.categoryName,
     'notes': b.notes,
+    'paymentMethodId': b.paymentMethodId,
+    'paymentMethodName': b.paymentMethodName,
+    'transferFee': b.transferFee,
   };
 
   /// Khusus untuk create — include createdAt via serverTimestamp
@@ -210,6 +224,9 @@ class BillService {
     'categoryId': b.categoryId,
     'categoryName': b.categoryName,
     'notes': b.notes,
+    'paymentMethodId': b.paymentMethodId,
+    'paymentMethodName': b.paymentMethodName,
+    'transferFee': b.transferFee,
     'createdAt': DateTime.now().toIso8601String(),
   };
 }

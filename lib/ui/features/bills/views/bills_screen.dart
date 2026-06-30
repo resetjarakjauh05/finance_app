@@ -127,14 +127,17 @@ class _BillsScreenState extends State<BillsScreen>
 
     if (result != null && result.amount > 0 && mounted) {
       try {
-        await _viewModel.payBill(bill, result.amount, result.method);
+        await _viewModel.payBill(bill, result.amount, result.method, transferFee: result.transferFee);
         if (mounted) {
+          final totalDesc = result.transferFee > 0
+              ? '${_currencyFormat.format(result.amount)} + biaya transfer ${_currencyFormat.format(result.transferFee)}'
+              : _currencyFormat.format(result.amount);
           await showSuccessDialog(context,
               title: bill.type == BillType.hutang
                   ? 'Pembayaran Berhasil'
                   : 'Penerimaan Berhasil',
               message:
-                  '${_currencyFormat.format(result.amount)} untuk "${bill.name}" telah dicatat sebagai transaksi.',
+                  '$totalDesc untuk "${bill.name}" telah dicatat sebagai transaksi.',
               icon: Icons.check_circle);
         }
       } catch (e) {
@@ -377,8 +380,9 @@ class _BillsScreenState extends State<BillsScreen>
 
 class _PayResult {
   final int amount;
+  final int transferFee;
   final PaymentMethodModel method;
-  const _PayResult({required this.amount, required this.method});
+  const _PayResult({required this.amount, required this.transferFee, required this.method});
 }
 
 class _PayDialog extends StatefulWidget {
@@ -398,19 +402,23 @@ class _PayDialog extends StatefulWidget {
 
 class _PayDialogState extends State<_PayDialog> {
   late final TextEditingController _controller;
+  late final TextEditingController _feeController;
   late PaymentMethodModel _selectedMethod;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(
-        text: widget.bill.remainingAmount.toString());
+        text: ThousandsSeparatorInputFormatter.formatWithDots(
+            widget.bill.remainingAmount.toString()));
+    _feeController = TextEditingController(text: '0');
     _selectedMethod = widget.paymentMethods.first;
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _feeController.dispose();
     super.dispose();
   }
 
@@ -419,38 +427,55 @@ class _PayDialogState extends State<_PayDialog> {
     return AlertDialog(
       title: Text(
           '${widget.bill.type == BillType.hutang ? 'Bayar' : 'Terima'} "${widget.bill.name}"'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Sisa: ${widget.currencyFormat.format(widget.bill.remainingAmount)}'),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _controller,
-            keyboardType: TextInputType.number,
-            inputFormatters: [ThousandsSeparatorInputFormatter()],
-            decoration: const InputDecoration(
-              labelText: 'Nominal',
-              prefixText: 'Rp ',
-              border: OutlineInputBorder(),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Sisa: ${widget.currencyFormat.format(widget.bill.remainingAmount)}'),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _controller,
+              keyboardType: TextInputType.number,
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
+              decoration: InputDecoration(
+                labelText: widget.bill.type == BillType.hutang
+                    ? 'Nominal Bayar'
+                    : 'Nominal Diterima',
+                prefixText: 'Rp ',
+                border: const OutlineInputBorder(),
+              ),
+              autofocus: true,
             ),
-            autofocus: true,
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<PaymentMethodModel>(
-            initialValue: _selectedMethod,
-            decoration: const InputDecoration(
-              labelText: 'Metode Pembayaran',
-              border: OutlineInputBorder(),
+            const SizedBox(height: 12),
+            // Biaya transfer (wajib kedua tipe)
+            TextFormField(
+              controller: _feeController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [ThousandsSeparatorInputFormatter()],
+              decoration: const InputDecoration(
+                labelText: 'Biaya Transfer',
+                prefixText: 'Rp ',
+                border: OutlineInputBorder(),
+                helperText: 'Isi 0 jika tidak ada biaya transfer',
+              ),
             ),
-            items: widget.paymentMethods
-                .map((m) => DropdownMenuItem(value: m, child: Text(m.name)))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) setState(() => _selectedMethod = v);
-            },
-          ),
-        ],
+            const SizedBox(height: 12),
+            DropdownButtonFormField<PaymentMethodModel>(
+              initialValue: _selectedMethod,
+              decoration: const InputDecoration(
+                labelText: 'Metode Pembayaran',
+                border: OutlineInputBorder(),
+              ),
+              items: widget.paymentMethods
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m.name)))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _selectedMethod = v);
+              },
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -461,8 +486,9 @@ class _PayDialogState extends State<_PayDialog> {
           onPressed: () {
             final amount = ThousandsSeparatorInputFormatter.parseValue(_controller.text);
             if (amount <= 0) return;
+            final fee = ThousandsSeparatorInputFormatter.parseValue(_feeController.text);
             Navigator.of(context).pop(
-              _PayResult(amount: amount, method: _selectedMethod),
+              _PayResult(amount: amount, transferFee: fee, method: _selectedMethod),
             );
           },
           child: Text(

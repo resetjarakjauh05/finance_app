@@ -55,6 +55,18 @@ class DatabaseHelper {
           await db.execute("ALTER TABLE bills ADD COLUMN categoryName TEXT");
           debugPrint('DB onOpen: added bills.categoryName');
         }
+        if (!billsColNames.contains('paymentMethodId')) {
+          await db.execute("ALTER TABLE bills ADD COLUMN paymentMethodId TEXT");
+          debugPrint('DB onOpen: added bills.paymentMethodId');
+        }
+        if (!billsColNames.contains('paymentMethodName')) {
+          await db.execute("ALTER TABLE bills ADD COLUMN paymentMethodName TEXT");
+          debugPrint('DB onOpen: added bills.paymentMethodName');
+        }
+        if (!billsColNames.contains('transferFee')) {
+          await db.execute("ALTER TABLE bills ADD COLUMN transferFee INTEGER NOT NULL DEFAULT 0");
+          debugPrint('DB onOpen: added bills.transferFee');
+        }
 
         // Ensure custody table has all required columns
         final custodyCols = await db.rawQuery('PRAGMA table_info(custody)');
@@ -507,6 +519,9 @@ class DatabaseHelper {
         categoryId TEXT,
         categoryName TEXT,
         notes TEXT,
+        paymentMethodId TEXT,
+        paymentMethodName TEXT,
+        transferFee INTEGER NOT NULL DEFAULT 0,
         isSynced INTEGER DEFAULT 0,
         syncedAt INTEGER,
         localCreatedAt INTEGER NOT NULL,

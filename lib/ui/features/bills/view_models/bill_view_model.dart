@@ -49,6 +49,8 @@ class BillViewModel extends ChangeNotifier {
     String? category,
     String? categoryId,
     String? categoryName,
+    PaymentMethodModel? paymentMethod,
+    int transferFee = 0,
     String? notes,
   }) async {
     _setLoading(true);
@@ -63,6 +65,8 @@ class BillViewModel extends ChangeNotifier {
         category: category,
         categoryId: categoryId,
         categoryName: categoryName,
+        paymentMethod: paymentMethod,
+        transferFee: transferFee,
         notes: notes,
       );
       _setLoading(false);
@@ -89,11 +93,11 @@ class BillViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> payBill(BillModel bill, int payAmount, PaymentMethodModel paymentMethod) async {
+  Future<void> payBill(BillModel bill, int payAmount, PaymentMethodModel paymentMethod, {int transferFee = 0}) async {
     _setLoading(true);
     _clearError();
     try {
-      await _repository.payBill(bill, payAmount, paymentMethod);
+      await _repository.payBill(bill, payAmount, paymentMethod, transferFee: transferFee);
       _setLoading(false);
       await loadBills();
     } catch (e) {

@@ -20,6 +20,9 @@ _BillModel _$BillModelFromJson(Map<String, dynamic> json) => _BillModel(
   categoryId: json['categoryId'] as String?,
   categoryName: json['categoryName'] as String?,
   notes: json['notes'] as String?,
+  paymentMethodId: json['paymentMethodId'] as String?,
+  paymentMethodName: json['paymentMethodName'] as String?,
+  transferFee: (json['transferFee'] as num?)?.toInt() ?? 0,
   isSynced: json['isSynced'] as bool? ?? false,
   syncedAt: json['syncedAt'] == null
       ? null
@@ -46,6 +49,9 @@ Map<String, dynamic> _$BillModelToJson(_BillModel instance) =>
       'categoryId': instance.categoryId,
       'categoryName': instance.categoryName,
       'notes': instance.notes,
+      'paymentMethodId': instance.paymentMethodId,
+      'paymentMethodName': instance.paymentMethodName,
+      'transferFee': instance.transferFee,
       'isSynced': instance.isSynced,
       'syncedAt': instance.syncedAt?.toIso8601String(),
       'localCreatedAt': instance.localCreatedAt.toIso8601String(),

@@ -625,6 +625,9 @@ class SyncEngine extends ChangeNotifier {
     'categoryId': data['categoryId'],
     'categoryName': data['categoryName'],
     'notes': data['notes'],
+    'paymentMethodId': data['paymentMethodId'],
+    'paymentMethodName': data['paymentMethodName'],
+    'transferFee': data['transferFee'] ?? 0,
     'createdAt': data['createdAt'] is String
         ? Timestamp.fromDate(DateTime.parse(data['createdAt'] as String))
         : FieldValue.serverTimestamp(),
