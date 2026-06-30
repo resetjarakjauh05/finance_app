@@ -30,10 +30,16 @@ class _BillsScreenState extends State<BillsScreen>
       NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
   final _dateFormat = DateFormat('dd MMM yyyy', 'id_ID');
 
+  // Filter state per tipe — 0=Semua, 1=Belum Lunas, 2=Lunas
+  final Map<BillType, int> _filterIndex = {
+    BillType.hutang: 0,
+    BillType.piutang: 0,
+    BillType.tagihan: 0,
+  };
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _viewModel = BillViewModel(
       repository: BillRepository(service: BillService()),
       userId: widget.userId,
@@ -198,30 +204,75 @@ class _BillsScreenState extends State<BillsScreen>
         .toList()
       ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
 
-    final unpaid =
-        all.where((b) => b.status != BillStatus.paid).toList();
-    final paid =
-        all.where((b) => b.status == BillStatus.paid).toList();
+    if (all.isEmpty) return _buildEmptyState(type);
 
-    if (all.isEmpty) {
-      return _buildEmptyState(type);
-    }
+    final filterIdx = _filterIndex[type]!;
+    final filtered = switch (filterIdx) {
+      1 => all.where((b) => b.status != BillStatus.paid).toList(),
+      2 => all.where((b) => b.status == BillStatus.paid).toList(),
+      _ => all,
+    };
 
-    return ListView(
-      padding: const EdgeInsets.all(12),
+    final unpaid = filtered.where((b) => b.status != BillStatus.paid).toList();
+    final paid   = filtered.where((b) => b.status == BillStatus.paid).toList();
+
+    return Column(
       children: [
-        if (unpaid.isNotEmpty) ...[
-          _sectionHeader(
-              type == BillType.tagihan ? 'Aktif' : 'Belum Lunas',
-              unpaid.length),
-          ...unpaid.map((b) => _buildCard(b, showPay: true)),
-        ],
-        if (paid.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          _sectionHeader('Lunas', paid.length),
-          ...paid.map((b) => _buildCard(b, showPay: false)),
-        ],
+        // Filter chips
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          alignment: Alignment.centerLeft,
+          child: Wrap(
+            spacing: 8,
+            children: [
+              _filterChip(type, 0, 'Semua'),
+              _filterChip(type, 1, type == BillType.tagihan ? 'Aktif' : 'Belum Lunas'),
+              _filterChip(type, 2, 'Lunas'),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        // List
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text(
+                    'Tidak ada data',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: Colors.grey),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(12),
+                  children: [
+                    if (unpaid.isNotEmpty && filterIdx != 2) ...[
+                      _sectionHeader(
+                          type == BillType.tagihan ? 'Aktif' : 'Belum Lunas',
+                          unpaid.length),
+                      ...unpaid.map((b) => _buildCard(b, showPay: true)),
+                    ],
+                    if (paid.isNotEmpty && filterIdx != 1) ...[
+                      if (unpaid.isNotEmpty && filterIdx == 0)
+                        const SizedBox(height: 8),
+                      _sectionHeader('Lunas', paid.length),
+                      ...paid.map((b) => _buildCard(b, showPay: false)),
+                    ],
+                  ],
+                ),
+        ),
       ],
+    );
+  }
+
+  Widget _filterChip(BillType type, int index, String label) {
+    return FilterChip(
+      label: Text(label),
+      selected: _filterIndex[type] == index,
+      onSelected: (_) => setState(() => _filterIndex[type] = index),
+      showCheckmark: false,
+      visualDensity: VisualDensity.compact,
     );
   }
 
