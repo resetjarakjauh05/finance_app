@@ -19,6 +19,8 @@ _SavingsPlanModel _$SavingsPlanModelFromJson(Map<String, dynamic> json) =>
       targetDate: json['targetDate'] == null
           ? null
           : DateTime.parse(json['targetDate'] as String),
+      savingsPaymentMethodId: json['savingsPaymentMethodId'] as String?,
+      savingsPaymentMethodName: json['savingsPaymentMethodName'] as String?,
       isActive: json['isActive'] as bool? ?? true,
       firebaseDocId: json['firebaseDocId'] as String?,
       isSynced: json['isSynced'] as bool? ?? false,
@@ -43,6 +45,8 @@ Map<String, dynamic> _$SavingsPlanModelToJson(_SavingsPlanModel instance) =>
       'savedAmount': instance.savedAmount,
       'monthlyTarget': instance.monthlyTarget,
       'targetDate': instance.targetDate?.toIso8601String(),
+      'savingsPaymentMethodId': instance.savingsPaymentMethodId,
+      'savingsPaymentMethodName': instance.savingsPaymentMethodName,
       'isActive': instance.isActive,
       'firebaseDocId': instance.firebaseDocId,
       'isSynced': instance.isSynced,

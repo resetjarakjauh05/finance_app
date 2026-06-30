@@ -67,7 +67,7 @@ extension BillStatusExtension on BillStatus {
 
 /// Model tagihan/hutang
 @freezed
-class BillModel with _$BillModel {
+abstract class BillModel with _$BillModel {
   const factory BillModel({
     required int id,
     String? firebaseDocId,

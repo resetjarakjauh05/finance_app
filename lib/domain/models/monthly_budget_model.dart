@@ -5,7 +5,7 @@ part 'monthly_budget_model.g.dart';
 
 /// Plan anggaran bulanan per kategori
 @freezed
-class MonthlyBudgetModel with _$MonthlyBudgetModel {
+abstract class MonthlyBudgetModel with _$MonthlyBudgetModel {
   const factory MonthlyBudgetModel({
     required String id,
     required String userId,

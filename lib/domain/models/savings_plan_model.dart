@@ -4,7 +4,7 @@ part 'savings_plan_model.freezed.dart';
 part 'savings_plan_model.g.dart';
 
 @freezed
-class SavingsPlanModel with _$SavingsPlanModel {
+abstract class SavingsPlanModel with _$SavingsPlanModel {
   const factory SavingsPlanModel({
     required String id,
     required String userId,
@@ -19,6 +19,9 @@ class SavingsPlanModel with _$SavingsPlanModel {
     @Default(0) int monthlyTarget,
     /// Deadline target (opsional)
     DateTime? targetDate,
+    /// Rekening tujuan tabungan (ditetapkan saat buat plan)
+    String? savingsPaymentMethodId,
+    String? savingsPaymentMethodName,
     @Default(true) bool isActive,
     String? firebaseDocId,
     @Default(false) bool isSynced,
@@ -69,6 +72,8 @@ extension SavingsPlanModelExtension on SavingsPlanModel {
       'savedAmount': savedAmount,
       'monthlyTarget': monthlyTarget,
       'targetDate': targetDate?.millisecondsSinceEpoch,
+      'savingsPaymentMethodId': savingsPaymentMethodId,
+      'savingsPaymentMethodName': savingsPaymentMethodName,
       'isActive': isActive ? 1 : 0,
       'firebaseDocId': firebaseDocId,
       'isSynced': isSynced ? 1 : 0,
@@ -92,6 +97,8 @@ extension SavingsPlanModelExtension on SavingsPlanModel {
       targetDate: map['targetDate'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['targetDate'] as int)
           : null,
+      savingsPaymentMethodId: map['savingsPaymentMethodId'] as String?,
+      savingsPaymentMethodName: map['savingsPaymentMethodName'] as String?,
       isActive: (map['isActive'] as int) == 1,
       firebaseDocId: map['firebaseDocId'] as String?,
       isSynced: (map['isSynced'] as int) == 1,
@@ -110,7 +117,7 @@ extension SavingsPlanModelExtension on SavingsPlanModel {
 
 /// Model untuk riwayat alokasi ke tabungan
 @freezed
-class SavingsAllocationModel with _$SavingsAllocationModel {
+abstract class SavingsAllocationModel with _$SavingsAllocationModel {
   const factory SavingsAllocationModel({
     required String id,
     required String userId,

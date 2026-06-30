@@ -35,6 +35,7 @@ class CustodyMovementModel {
   final String? custodyFirebaseDocId;
   final MovementType movementType;
   final int nominal;
+  final int transferFee;
   final DateTime date;
   final String? description;
   final bool isSynced;
@@ -48,6 +49,7 @@ class CustodyMovementModel {
     this.custodyFirebaseDocId,
     required this.movementType,
     required this.nominal,
+    this.transferFee = 0,
     required this.date,
     this.description,
     this.isSynced = false,
@@ -62,6 +64,7 @@ class CustodyMovementModel {
     String? custodyFirebaseDocId,
     MovementType? movementType,
     int? nominal,
+    int? transferFee,
     DateTime? date,
     String? description,
     bool? isSynced,
@@ -75,6 +78,7 @@ class CustodyMovementModel {
       custodyFirebaseDocId: custodyFirebaseDocId ?? this.custodyFirebaseDocId,
       movementType: movementType ?? this.movementType,
       nominal: nominal ?? this.nominal,
+      transferFee: transferFee ?? this.transferFee,
       date: date ?? this.date,
       description: description ?? this.description,
       isSynced: isSynced ?? this.isSynced,
@@ -91,6 +95,7 @@ class CustodyMovementModel {
       'custodyFirebaseDocId': custodyFirebaseDocId,
       'movementType': movementType.name,
       'nominal': nominal,
+      'transferFee': transferFee,
       'date': date.millisecondsSinceEpoch,
       'description': description,
       'isSynced': isSynced ? 1 : 0,
@@ -107,6 +112,7 @@ class CustodyMovementModel {
       custodyFirebaseDocId: map['custodyFirebaseDocId'] as String?,
       movementType: MovementTypeExtension.fromString(map['movementType'] as String? ?? 'MASUK'),
       nominal: map['nominal'] as int,
+      transferFee: (map['transferFee'] as int?) ?? 0,
       date: DateTime.fromMillisecondsSinceEpoch(map['date'] as int),
       description: map['description'] as String?,
       isSynced: (map['isSynced'] as int) == 1,

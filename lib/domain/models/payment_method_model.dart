@@ -13,7 +13,7 @@ enum PaymentMethodType {
 
 /// Model untuk metode pembayaran
 @freezed
-class PaymentMethodModel with _$PaymentMethodModel {
+abstract class PaymentMethodModel with _$PaymentMethodModel {
   const factory PaymentMethodModel({
     required String id,
     required String userId,

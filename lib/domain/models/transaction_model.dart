@@ -32,7 +32,7 @@ extension TransactionCategoryExtension on TransactionCategory {
 
 /// Model untuk transaksi
 @freezed
-class TransactionModel with _$TransactionModel {
+abstract class TransactionModel with _$TransactionModel {
   const factory TransactionModel({
     required int id,
     String? firebaseDocId,

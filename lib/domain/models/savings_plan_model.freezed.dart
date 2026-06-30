@@ -19,7 +19,8 @@ mixin _$SavingsPlanModel {
  int get targetAmount;/// Sudah terkumpul (akumulasi dari semua alokasi)
  int get savedAmount;/// Target per bulan (opsional, sebagai panduan)
  int get monthlyTarget;/// Deadline target (opsional)
- DateTime? get targetDate; bool get isActive; String? get firebaseDocId; bool get isSynced; DateTime? get syncedAt; DateTime get localCreatedAt; DateTime? get updatedAt; bool get isDeleted;
+ DateTime? get targetDate;/// Rekening tujuan tabungan (ditetapkan saat buat plan)
+ String? get savingsPaymentMethodId; String? get savingsPaymentMethodName; bool get isActive; String? get firebaseDocId; bool get isSynced; DateTime? get syncedAt; DateTime get localCreatedAt; DateTime? get updatedAt; bool get isDeleted;
 /// Create a copy of SavingsPlanModel
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -32,16 +33,16 @@ $SavingsPlanModelCopyWith<SavingsPlanModel> get copyWith => _$SavingsPlanModelCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SavingsPlanModel&&(identical(other.id, id) || other.id == id)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.icon, icon) || other.icon == icon)&&(identical(other.targetAmount, targetAmount) || other.targetAmount == targetAmount)&&(identical(other.savedAmount, savedAmount) || other.savedAmount == savedAmount)&&(identical(other.monthlyTarget, monthlyTarget) || other.monthlyTarget == monthlyTarget)&&(identical(other.targetDate, targetDate) || other.targetDate == targetDate)&&(identical(other.isActive, isActive) || other.isActive == isActive)&&(identical(other.firebaseDocId, firebaseDocId) || other.firebaseDocId == firebaseDocId)&&(identical(other.isSynced, isSynced) || other.isSynced == isSynced)&&(identical(other.syncedAt, syncedAt) || other.syncedAt == syncedAt)&&(identical(other.localCreatedAt, localCreatedAt) || other.localCreatedAt == localCreatedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.isDeleted, isDeleted) || other.isDeleted == isDeleted));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SavingsPlanModel&&(identical(other.id, id) || other.id == id)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.icon, icon) || other.icon == icon)&&(identical(other.targetAmount, targetAmount) || other.targetAmount == targetAmount)&&(identical(other.savedAmount, savedAmount) || other.savedAmount == savedAmount)&&(identical(other.monthlyTarget, monthlyTarget) || other.monthlyTarget == monthlyTarget)&&(identical(other.targetDate, targetDate) || other.targetDate == targetDate)&&(identical(other.savingsPaymentMethodId, savingsPaymentMethodId) || other.savingsPaymentMethodId == savingsPaymentMethodId)&&(identical(other.savingsPaymentMethodName, savingsPaymentMethodName) || other.savingsPaymentMethodName == savingsPaymentMethodName)&&(identical(other.isActive, isActive) || other.isActive == isActive)&&(identical(other.firebaseDocId, firebaseDocId) || other.firebaseDocId == firebaseDocId)&&(identical(other.isSynced, isSynced) || other.isSynced == isSynced)&&(identical(other.syncedAt, syncedAt) || other.syncedAt == syncedAt)&&(identical(other.localCreatedAt, localCreatedAt) || other.localCreatedAt == localCreatedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.isDeleted, isDeleted) || other.isDeleted == isDeleted));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,userId,name,description,icon,targetAmount,savedAmount,monthlyTarget,targetDate,isActive,firebaseDocId,isSynced,syncedAt,localCreatedAt,updatedAt,isDeleted);
+int get hashCode => Object.hash(runtimeType,id,userId,name,description,icon,targetAmount,savedAmount,monthlyTarget,targetDate,savingsPaymentMethodId,savingsPaymentMethodName,isActive,firebaseDocId,isSynced,syncedAt,localCreatedAt,updatedAt,isDeleted);
 
 @override
 String toString() {
-  return 'SavingsPlanModel(id: $id, userId: $userId, name: $name, description: $description, icon: $icon, targetAmount: $targetAmount, savedAmount: $savedAmount, monthlyTarget: $monthlyTarget, targetDate: $targetDate, isActive: $isActive, firebaseDocId: $firebaseDocId, isSynced: $isSynced, syncedAt: $syncedAt, localCreatedAt: $localCreatedAt, updatedAt: $updatedAt, isDeleted: $isDeleted)';
+  return 'SavingsPlanModel(id: $id, userId: $userId, name: $name, description: $description, icon: $icon, targetAmount: $targetAmount, savedAmount: $savedAmount, monthlyTarget: $monthlyTarget, targetDate: $targetDate, savingsPaymentMethodId: $savingsPaymentMethodId, savingsPaymentMethodName: $savingsPaymentMethodName, isActive: $isActive, firebaseDocId: $firebaseDocId, isSynced: $isSynced, syncedAt: $syncedAt, localCreatedAt: $localCreatedAt, updatedAt: $updatedAt, isDeleted: $isDeleted)';
 }
 
 
@@ -52,7 +53,7 @@ abstract mixin class $SavingsPlanModelCopyWith<$Res>  {
   factory $SavingsPlanModelCopyWith(SavingsPlanModel value, $Res Function(SavingsPlanModel) _then) = _$SavingsPlanModelCopyWithImpl;
 @useResult
 $Res call({
- String id, String userId, String name, String? description, String? icon, int targetAmount, int savedAmount, int monthlyTarget, DateTime? targetDate, bool isActive, String? firebaseDocId, bool isSynced, DateTime? syncedAt, DateTime localCreatedAt, DateTime? updatedAt, bool isDeleted
+ String id, String userId, String name, String? description, String? icon, int targetAmount, int savedAmount, int monthlyTarget, DateTime? targetDate, String? savingsPaymentMethodId, String? savingsPaymentMethodName, bool isActive, String? firebaseDocId, bool isSynced, DateTime? syncedAt, DateTime localCreatedAt, DateTime? updatedAt, bool isDeleted
 });
 
 
@@ -69,7 +70,7 @@ class _$SavingsPlanModelCopyWithImpl<$Res>
 
 /// Create a copy of SavingsPlanModel
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? userId = null,Object? name = null,Object? description = freezed,Object? icon = freezed,Object? targetAmount = null,Object? savedAmount = null,Object? monthlyTarget = null,Object? targetDate = freezed,Object? isActive = null,Object? firebaseDocId = freezed,Object? isSynced = null,Object? syncedAt = freezed,Object? localCreatedAt = null,Object? updatedAt = freezed,Object? isDeleted = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? userId = null,Object? name = null,Object? description = freezed,Object? icon = freezed,Object? targetAmount = null,Object? savedAmount = null,Object? monthlyTarget = null,Object? targetDate = freezed,Object? savingsPaymentMethodId = freezed,Object? savingsPaymentMethodName = freezed,Object? isActive = null,Object? firebaseDocId = freezed,Object? isSynced = null,Object? syncedAt = freezed,Object? localCreatedAt = null,Object? updatedAt = freezed,Object? isDeleted = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,userId: null == userId ? _self.userId : userId // ignore: cast_nullable_to_non_nullable
@@ -80,7 +81,9 @@ as String?,targetAmount: null == targetAmount ? _self.targetAmount : targetAmoun
 as int,savedAmount: null == savedAmount ? _self.savedAmount : savedAmount // ignore: cast_nullable_to_non_nullable
 as int,monthlyTarget: null == monthlyTarget ? _self.monthlyTarget : monthlyTarget // ignore: cast_nullable_to_non_nullable
 as int,targetDate: freezed == targetDate ? _self.targetDate : targetDate // ignore: cast_nullable_to_non_nullable
-as DateTime?,isActive: null == isActive ? _self.isActive : isActive // ignore: cast_nullable_to_non_nullable
+as DateTime?,savingsPaymentMethodId: freezed == savingsPaymentMethodId ? _self.savingsPaymentMethodId : savingsPaymentMethodId // ignore: cast_nullable_to_non_nullable
+as String?,savingsPaymentMethodName: freezed == savingsPaymentMethodName ? _self.savingsPaymentMethodName : savingsPaymentMethodName // ignore: cast_nullable_to_non_nullable
+as String?,isActive: null == isActive ? _self.isActive : isActive // ignore: cast_nullable_to_non_nullable
 as bool,firebaseDocId: freezed == firebaseDocId ? _self.firebaseDocId : firebaseDocId // ignore: cast_nullable_to_non_nullable
 as String?,isSynced: null == isSynced ? _self.isSynced : isSynced // ignore: cast_nullable_to_non_nullable
 as bool,syncedAt: freezed == syncedAt ? _self.syncedAt : syncedAt // ignore: cast_nullable_to_non_nullable
@@ -172,10 +175,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String userId,  String name,  String? description,  String? icon,  int targetAmount,  int savedAmount,  int monthlyTarget,  DateTime? targetDate,  bool isActive,  String? firebaseDocId,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String userId,  String name,  String? description,  String? icon,  int targetAmount,  int savedAmount,  int monthlyTarget,  DateTime? targetDate,  String? savingsPaymentMethodId,  String? savingsPaymentMethodName,  bool isActive,  String? firebaseDocId,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SavingsPlanModel() when $default != null:
-return $default(_that.id,_that.userId,_that.name,_that.description,_that.icon,_that.targetAmount,_that.savedAmount,_that.monthlyTarget,_that.targetDate,_that.isActive,_that.firebaseDocId,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
+return $default(_that.id,_that.userId,_that.name,_that.description,_that.icon,_that.targetAmount,_that.savedAmount,_that.monthlyTarget,_that.targetDate,_that.savingsPaymentMethodId,_that.savingsPaymentMethodName,_that.isActive,_that.firebaseDocId,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
   return orElse();
 
 }
@@ -193,10 +196,10 @@ return $default(_that.id,_that.userId,_that.name,_that.description,_that.icon,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String userId,  String name,  String? description,  String? icon,  int targetAmount,  int savedAmount,  int monthlyTarget,  DateTime? targetDate,  bool isActive,  String? firebaseDocId,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String userId,  String name,  String? description,  String? icon,  int targetAmount,  int savedAmount,  int monthlyTarget,  DateTime? targetDate,  String? savingsPaymentMethodId,  String? savingsPaymentMethodName,  bool isActive,  String? firebaseDocId,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)  $default,) {final _that = this;
 switch (_that) {
 case _SavingsPlanModel():
-return $default(_that.id,_that.userId,_that.name,_that.description,_that.icon,_that.targetAmount,_that.savedAmount,_that.monthlyTarget,_that.targetDate,_that.isActive,_that.firebaseDocId,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
+return $default(_that.id,_that.userId,_that.name,_that.description,_that.icon,_that.targetAmount,_that.savedAmount,_that.monthlyTarget,_that.targetDate,_that.savingsPaymentMethodId,_that.savingsPaymentMethodName,_that.isActive,_that.firebaseDocId,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -213,10 +216,10 @@ return $default(_that.id,_that.userId,_that.name,_that.description,_that.icon,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String userId,  String name,  String? description,  String? icon,  int targetAmount,  int savedAmount,  int monthlyTarget,  DateTime? targetDate,  bool isActive,  String? firebaseDocId,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String userId,  String name,  String? description,  String? icon,  int targetAmount,  int savedAmount,  int monthlyTarget,  DateTime? targetDate,  String? savingsPaymentMethodId,  String? savingsPaymentMethodName,  bool isActive,  String? firebaseDocId,  bool isSynced,  DateTime? syncedAt,  DateTime localCreatedAt,  DateTime? updatedAt,  bool isDeleted)?  $default,) {final _that = this;
 switch (_that) {
 case _SavingsPlanModel() when $default != null:
-return $default(_that.id,_that.userId,_that.name,_that.description,_that.icon,_that.targetAmount,_that.savedAmount,_that.monthlyTarget,_that.targetDate,_that.isActive,_that.firebaseDocId,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
+return $default(_that.id,_that.userId,_that.name,_that.description,_that.icon,_that.targetAmount,_that.savedAmount,_that.monthlyTarget,_that.targetDate,_that.savingsPaymentMethodId,_that.savingsPaymentMethodName,_that.isActive,_that.firebaseDocId,_that.isSynced,_that.syncedAt,_that.localCreatedAt,_that.updatedAt,_that.isDeleted);case _:
   return null;
 
 }
@@ -228,7 +231,7 @@ return $default(_that.id,_that.userId,_that.name,_that.description,_that.icon,_t
 @JsonSerializable()
 
 class _SavingsPlanModel implements SavingsPlanModel {
-  const _SavingsPlanModel({required this.id, required this.userId, required this.name, this.description, this.icon, required this.targetAmount, this.savedAmount = 0, this.monthlyTarget = 0, this.targetDate, this.isActive = true, this.firebaseDocId, this.isSynced = false, this.syncedAt, required this.localCreatedAt, this.updatedAt, this.isDeleted = false});
+  const _SavingsPlanModel({required this.id, required this.userId, required this.name, this.description, this.icon, required this.targetAmount, this.savedAmount = 0, this.monthlyTarget = 0, this.targetDate, this.savingsPaymentMethodId, this.savingsPaymentMethodName, this.isActive = true, this.firebaseDocId, this.isSynced = false, this.syncedAt, required this.localCreatedAt, this.updatedAt, this.isDeleted = false});
   factory _SavingsPlanModel.fromJson(Map<String, dynamic> json) => _$SavingsPlanModelFromJson(json);
 
 @override final  String id;
@@ -244,6 +247,9 @@ class _SavingsPlanModel implements SavingsPlanModel {
 @override@JsonKey() final  int monthlyTarget;
 /// Deadline target (opsional)
 @override final  DateTime? targetDate;
+/// Rekening tujuan tabungan (ditetapkan saat buat plan)
+@override final  String? savingsPaymentMethodId;
+@override final  String? savingsPaymentMethodName;
 @override@JsonKey() final  bool isActive;
 @override final  String? firebaseDocId;
 @override@JsonKey() final  bool isSynced;
@@ -265,16 +271,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SavingsPlanModel&&(identical(other.id, id) || other.id == id)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.icon, icon) || other.icon == icon)&&(identical(other.targetAmount, targetAmount) || other.targetAmount == targetAmount)&&(identical(other.savedAmount, savedAmount) || other.savedAmount == savedAmount)&&(identical(other.monthlyTarget, monthlyTarget) || other.monthlyTarget == monthlyTarget)&&(identical(other.targetDate, targetDate) || other.targetDate == targetDate)&&(identical(other.isActive, isActive) || other.isActive == isActive)&&(identical(other.firebaseDocId, firebaseDocId) || other.firebaseDocId == firebaseDocId)&&(identical(other.isSynced, isSynced) || other.isSynced == isSynced)&&(identical(other.syncedAt, syncedAt) || other.syncedAt == syncedAt)&&(identical(other.localCreatedAt, localCreatedAt) || other.localCreatedAt == localCreatedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.isDeleted, isDeleted) || other.isDeleted == isDeleted));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SavingsPlanModel&&(identical(other.id, id) || other.id == id)&&(identical(other.userId, userId) || other.userId == userId)&&(identical(other.name, name) || other.name == name)&&(identical(other.description, description) || other.description == description)&&(identical(other.icon, icon) || other.icon == icon)&&(identical(other.targetAmount, targetAmount) || other.targetAmount == targetAmount)&&(identical(other.savedAmount, savedAmount) || other.savedAmount == savedAmount)&&(identical(other.monthlyTarget, monthlyTarget) || other.monthlyTarget == monthlyTarget)&&(identical(other.targetDate, targetDate) || other.targetDate == targetDate)&&(identical(other.savingsPaymentMethodId, savingsPaymentMethodId) || other.savingsPaymentMethodId == savingsPaymentMethodId)&&(identical(other.savingsPaymentMethodName, savingsPaymentMethodName) || other.savingsPaymentMethodName == savingsPaymentMethodName)&&(identical(other.isActive, isActive) || other.isActive == isActive)&&(identical(other.firebaseDocId, firebaseDocId) || other.firebaseDocId == firebaseDocId)&&(identical(other.isSynced, isSynced) || other.isSynced == isSynced)&&(identical(other.syncedAt, syncedAt) || other.syncedAt == syncedAt)&&(identical(other.localCreatedAt, localCreatedAt) || other.localCreatedAt == localCreatedAt)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt)&&(identical(other.isDeleted, isDeleted) || other.isDeleted == isDeleted));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,userId,name,description,icon,targetAmount,savedAmount,monthlyTarget,targetDate,isActive,firebaseDocId,isSynced,syncedAt,localCreatedAt,updatedAt,isDeleted);
+int get hashCode => Object.hash(runtimeType,id,userId,name,description,icon,targetAmount,savedAmount,monthlyTarget,targetDate,savingsPaymentMethodId,savingsPaymentMethodName,isActive,firebaseDocId,isSynced,syncedAt,localCreatedAt,updatedAt,isDeleted);
 
 @override
 String toString() {
-  return 'SavingsPlanModel(id: $id, userId: $userId, name: $name, description: $description, icon: $icon, targetAmount: $targetAmount, savedAmount: $savedAmount, monthlyTarget: $monthlyTarget, targetDate: $targetDate, isActive: $isActive, firebaseDocId: $firebaseDocId, isSynced: $isSynced, syncedAt: $syncedAt, localCreatedAt: $localCreatedAt, updatedAt: $updatedAt, isDeleted: $isDeleted)';
+  return 'SavingsPlanModel(id: $id, userId: $userId, name: $name, description: $description, icon: $icon, targetAmount: $targetAmount, savedAmount: $savedAmount, monthlyTarget: $monthlyTarget, targetDate: $targetDate, savingsPaymentMethodId: $savingsPaymentMethodId, savingsPaymentMethodName: $savingsPaymentMethodName, isActive: $isActive, firebaseDocId: $firebaseDocId, isSynced: $isSynced, syncedAt: $syncedAt, localCreatedAt: $localCreatedAt, updatedAt: $updatedAt, isDeleted: $isDeleted)';
 }
 
 
@@ -285,7 +291,7 @@ abstract mixin class _$SavingsPlanModelCopyWith<$Res> implements $SavingsPlanMod
   factory _$SavingsPlanModelCopyWith(_SavingsPlanModel value, $Res Function(_SavingsPlanModel) _then) = __$SavingsPlanModelCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String userId, String name, String? description, String? icon, int targetAmount, int savedAmount, int monthlyTarget, DateTime? targetDate, bool isActive, String? firebaseDocId, bool isSynced, DateTime? syncedAt, DateTime localCreatedAt, DateTime? updatedAt, bool isDeleted
+ String id, String userId, String name, String? description, String? icon, int targetAmount, int savedAmount, int monthlyTarget, DateTime? targetDate, String? savingsPaymentMethodId, String? savingsPaymentMethodName, bool isActive, String? firebaseDocId, bool isSynced, DateTime? syncedAt, DateTime localCreatedAt, DateTime? updatedAt, bool isDeleted
 });
 
 
@@ -302,7 +308,7 @@ class __$SavingsPlanModelCopyWithImpl<$Res>
 
 /// Create a copy of SavingsPlanModel
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? userId = null,Object? name = null,Object? description = freezed,Object? icon = freezed,Object? targetAmount = null,Object? savedAmount = null,Object? monthlyTarget = null,Object? targetDate = freezed,Object? isActive = null,Object? firebaseDocId = freezed,Object? isSynced = null,Object? syncedAt = freezed,Object? localCreatedAt = null,Object? updatedAt = freezed,Object? isDeleted = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? userId = null,Object? name = null,Object? description = freezed,Object? icon = freezed,Object? targetAmount = null,Object? savedAmount = null,Object? monthlyTarget = null,Object? targetDate = freezed,Object? savingsPaymentMethodId = freezed,Object? savingsPaymentMethodName = freezed,Object? isActive = null,Object? firebaseDocId = freezed,Object? isSynced = null,Object? syncedAt = freezed,Object? localCreatedAt = null,Object? updatedAt = freezed,Object? isDeleted = null,}) {
   return _then(_SavingsPlanModel(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,userId: null == userId ? _self.userId : userId // ignore: cast_nullable_to_non_nullable
@@ -313,7 +319,9 @@ as String?,targetAmount: null == targetAmount ? _self.targetAmount : targetAmoun
 as int,savedAmount: null == savedAmount ? _self.savedAmount : savedAmount // ignore: cast_nullable_to_non_nullable
 as int,monthlyTarget: null == monthlyTarget ? _self.monthlyTarget : monthlyTarget // ignore: cast_nullable_to_non_nullable
 as int,targetDate: freezed == targetDate ? _self.targetDate : targetDate // ignore: cast_nullable_to_non_nullable
-as DateTime?,isActive: null == isActive ? _self.isActive : isActive // ignore: cast_nullable_to_non_nullable
+as DateTime?,savingsPaymentMethodId: freezed == savingsPaymentMethodId ? _self.savingsPaymentMethodId : savingsPaymentMethodId // ignore: cast_nullable_to_non_nullable
+as String?,savingsPaymentMethodName: freezed == savingsPaymentMethodName ? _self.savingsPaymentMethodName : savingsPaymentMethodName // ignore: cast_nullable_to_non_nullable
+as String?,isActive: null == isActive ? _self.isActive : isActive // ignore: cast_nullable_to_non_nullable
 as bool,firebaseDocId: freezed == firebaseDocId ? _self.firebaseDocId : firebaseDocId // ignore: cast_nullable_to_non_nullable
 as String?,isSynced: null == isSynced ? _self.isSynced : isSynced // ignore: cast_nullable_to_non_nullable
 as bool,syncedAt: freezed == syncedAt ? _self.syncedAt : syncedAt // ignore: cast_nullable_to_non_nullable

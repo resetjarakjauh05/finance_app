@@ -18,7 +18,7 @@ const List<Map<String, dynamic>> kPresetCategories = [
 ];
 
 @freezed
-class CategoryModel with _$CategoryModel {
+abstract class CategoryModel with _$CategoryModel {
   const factory CategoryModel({
     required String id,
     required String userId,

@@ -4,7 +4,7 @@ part 'spending_limit_model.freezed.dart';
 part 'spending_limit_model.g.dart';
 
 @freezed
-class SpendingLimitModel with _$SpendingLimitModel {
+abstract class SpendingLimitModel with _$SpendingLimitModel {
   const factory SpendingLimitModel({
     required String id,
     required String userId,
