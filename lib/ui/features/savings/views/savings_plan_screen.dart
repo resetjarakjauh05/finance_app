@@ -817,6 +817,19 @@ class _SavingsAllocationFormScreenState
   PaymentMethodModel? _fromMethod; // rekening sumber
   PaymentMethodModel? _toMethod;   // rekening tujuan/simpan
 
+  /// Opsi dropdown "Ambil dari Rekening" — exclude rekening tujuan
+  List<PaymentMethodModel> get _fromOptions {
+    final toId = widget.plan.savingsPaymentMethodId ?? _toMethod?.id;
+    if (toId == null) return _paymentMethods;
+    return _paymentMethods.where((m) => m.id != toId).toList();
+  }
+
+  /// Opsi dropdown "Simpan di Rekening" — exclude rekening sumber
+  List<PaymentMethodModel> get _toOptions {
+    if (_fromMethod == null) return _paymentMethods;
+    return _paymentMethods.where((m) => m.id != _fromMethod!.id).toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -931,12 +944,19 @@ class _SavingsAllocationFormScreenState
                   prefixIcon: Icon(Icons.account_balance_wallet_outlined),
                   helperText: 'Rekening yang akan didebit',
                 ),
-                items: _paymentMethods.map((m) => DropdownMenuItem(
+                items: _fromOptions.map((m) => DropdownMenuItem(
                   value: m,
                   child: Text(m.name),
                 )).toList(),
                 onChanged: (v) => setState(() => _fromMethod = v),
-                validator: (v) => v == null ? 'Pilih rekening sumber' : null,
+                validator: (v) {
+                  if (v == null) return 'Pilih rekening sumber';
+                  final toId = widget.plan.savingsPaymentMethodId ?? _toMethod?.id;
+                  if (toId != null && v.id == toId) {
+                    return 'Rekening sumber tidak boleh sama dengan rekening tujuan';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 12),
 
@@ -982,12 +1002,18 @@ class _SavingsAllocationFormScreenState
                       value: null,
                       child: Text('— Tidak tracking —'),
                     ),
-                    ..._paymentMethods.map((m) => DropdownMenuItem(
+                    ..._toOptions.map((m) => DropdownMenuItem(
                       value: m,
                       child: Text(m.name),
                     )),
                   ],
-                  onChanged: (v) => setState(() => _toMethod = v),
+                  onChanged: (v) => setState(() {
+                    _toMethod = v;
+                    // Reset fromMethod jika rekening sumber sama dengan tujuan baru
+                    if (v != null && _fromMethod?.id == v.id) {
+                      _fromMethod = null;
+                    }
+                  }),
                 ),
               const SizedBox(height: 12),
 
