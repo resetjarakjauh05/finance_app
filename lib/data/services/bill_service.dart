@@ -150,6 +150,10 @@ class BillService {
       paymentMethodId: data['paymentMethodId'] as String?,
       paymentMethodName: data['paymentMethodName'] as String?,
       transferFee: (data['transferFee'] as num?)?.toInt() ?? 0,
+      billingDay: (data['billingDay'] as num?)?.toInt(),
+      maxInstallments: (data['maxInstallments'] as num?)?.toInt(),
+      installmentAmount: (data['installmentAmount'] as num?)?.toInt(),
+      installmentsPaid: (data['installmentsPaid'] as num?)?.toInt() ?? 0,
       isSynced: true,
       syncedAt: DateTime.now(),
       localCreatedAt: data['createdAt'] != null
@@ -203,6 +207,10 @@ class BillService {
     'paymentMethodId': b.paymentMethodId,
     'paymentMethodName': b.paymentMethodName,
     'transferFee': b.transferFee,
+    'billingDay': b.billingDay,
+    'maxInstallments': b.maxInstallments,
+    'installmentAmount': b.installmentAmount,
+    'installmentsPaid': b.installmentsPaid,
   };
 
   /// Khusus untuk create — include createdAt via serverTimestamp
@@ -227,6 +235,10 @@ class BillService {
     'paymentMethodId': b.paymentMethodId,
     'paymentMethodName': b.paymentMethodName,
     'transferFee': b.transferFee,
+    'billingDay': b.billingDay,
+    'maxInstallments': b.maxInstallments,
+    'installmentAmount': b.installmentAmount,
+    'installmentsPaid': b.installmentsPaid,
     'createdAt': DateTime.now().toIso8601String(),
   };
 }

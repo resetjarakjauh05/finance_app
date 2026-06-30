@@ -5,28 +5,32 @@ part 'bill_model.g.dart';
 
 /// Tipe tagihan
 enum BillType {
-  hutang,   // Kamu yang bayar ke orang lain
-  piutang,  // Orang lain yang bayar ke kamu
+  hutang,   // Kita yang berutang ke orang
+  piutang,  // Kita memberi pinjaman ke orang
+  tagihan,  // Tagihan rutin bulanan (listrik, langganan, cicilan, dll)
 }
 
 extension BillTypeExtension on BillType {
   String get displayName {
     switch (this) {
-      case BillType.hutang:  return 'Hutang';
-      case BillType.piutang: return 'Piutang';
+      case BillType.hutang:   return 'Hutang';
+      case BillType.piutang:  return 'Piutang';
+      case BillType.tagihan:  return 'Tagihan';
     }
   }
 
   String get name {
     switch (this) {
-      case BillType.hutang:  return 'HUTANG';
-      case BillType.piutang: return 'PIUTANG';
+      case BillType.hutang:   return 'HUTANG';
+      case BillType.piutang:  return 'PIUTANG';
+      case BillType.tagihan:  return 'TAGIHAN';
     }
   }
 
   static BillType fromString(String value) {
     switch (value.toUpperCase()) {
       case 'PIUTANG': return BillType.piutang;
+      case 'TAGIHAN': return BillType.tagihan;
       default:        return BillType.hutang;
     }
   }
@@ -82,11 +86,16 @@ abstract class BillModel with _$BillModel {
     String? categoryId,
     String? categoryName,
     String? notes,
-    // Field piutang: rekening yang didebit saat memberi pinjaman
+    // Field piutang/hutang: rekening yang terlibat saat create
     String? paymentMethodId,
     String? paymentMethodName,
-    // Biaya transfer saat create piutang atau saat bayar
+    // Biaya transfer saat create piutang/hutang atau saat bayar
     @Default(0) int transferFee,
+    // Field tagihan recurring
+    int? billingDay,           // Tanggal tagih per bulan (1-31), null = tidak recurring
+    int? maxInstallments,      // Batas cicilan, null = unlimited (tagihan terus setiap bulan)
+    int? installmentAmount,    // Nominal per cicilan, null = pakai nominal/maxInstallments
+    @Default(0) int installmentsPaid, // Cicilan yang sudah dibayar
     @Default(false) bool isSynced,
     DateTime? syncedAt,
     required DateTime localCreatedAt,
@@ -135,6 +144,10 @@ extension BillModelExtension on BillModel {
       'paymentMethodId': paymentMethodId,
       'paymentMethodName': paymentMethodName,
       'transferFee': transferFee,
+      'billingDay': billingDay,
+      'maxInstallments': maxInstallments,
+      'installmentAmount': installmentAmount,
+      'installmentsPaid': installmentsPaid,
       'isSynced': isSynced ? 1 : 0,
       'syncedAt': syncedAt?.millisecondsSinceEpoch,
       'localCreatedAt': localCreatedAt.millisecondsSinceEpoch,
@@ -161,6 +174,10 @@ extension BillModelExtension on BillModel {
       paymentMethodId: map['paymentMethodId'] as String?,
       paymentMethodName: map['paymentMethodName'] as String?,
       transferFee: (map['transferFee'] as int?) ?? 0,
+      billingDay: map['billingDay'] as int?,
+      maxInstallments: map['maxInstallments'] as int?,
+      installmentAmount: map['installmentAmount'] as int?,
+      installmentsPaid: (map['installmentsPaid'] as int?) ?? 0,
       isSynced: (map['isSynced'] as int) == 1,
       syncedAt: map['syncedAt'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['syncedAt'] as int)

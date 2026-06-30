@@ -32,20 +32,27 @@ class BillRepository {
     String? category,
     String? categoryId,
     String? categoryName,
-    PaymentMethodModel? paymentMethod,
+    PaymentMethodModel? paymentMethod, // opsional untuk hutang & piutang
     int transferFee = 0,
+    int? billingDay,
+    int? maxInstallments,
+    int? installmentAmount,
     String? notes,
   }) async {
-    if (name.trim().isEmpty) throw Exception('Nama tagihan tidak boleh kosong');
+    if (name.trim().isEmpty) throw Exception('Nama tidak boleh kosong');
     if (nominal <= 0) throw Exception('Nominal harus lebih dari 0');
     if (type == BillType.hutang && categoryId == null) {
       throw Exception('Kategori wajib dipilih untuk hutang');
     }
-    if (type == BillType.piutang && paymentMethod == null) {
-      throw Exception('Pilih rekening untuk piutang');
-    }
 
     final isOnline = await _isOnline();
+
+    // Hitung installmentAmount jika tidak diset tapi maxInstallments ada
+    final int? resolvedInstallmentAmount = installmentAmount ??
+        (maxInstallments != null && maxInstallments > 0
+            ? (nominal / maxInstallments).ceil()
+            : null);
+
     final bill = BillModel(
       id: 0,
       userId: userId,
@@ -58,19 +65,53 @@ class BillRepository {
       category: category?.trim(),
       categoryId: categoryId,
       categoryName: categoryName,
-      paymentMethodId: type == BillType.piutang ? paymentMethod?.id : null,
-      paymentMethodName: type == BillType.piutang ? paymentMethod?.name : null,
-      transferFee: type == BillType.piutang ? transferFee : 0,
+      paymentMethodId: (type == BillType.hutang || type == BillType.piutang)
+          ? paymentMethod?.id
+          : null,
+      paymentMethodName: (type == BillType.hutang || type == BillType.piutang)
+          ? paymentMethod?.name
+          : null,
+      transferFee: (type == BillType.hutang || type == BillType.piutang)
+          ? transferFee
+          : 0,
+      billingDay: type == BillType.tagihan ? billingDay : null,
+      maxInstallments: type == BillType.tagihan ? maxInstallments : null,
+      installmentAmount:
+          type == BillType.tagihan ? resolvedInstallmentAmount : null,
+      installmentsPaid: 0,
       notes: notes?.trim(),
       localCreatedAt: DateTime.now(),
     );
+
     final localId = await _service.createBill(bill, isOnline);
     final savedBill = bill.copyWith(id: localId);
 
-    // Piutang → auto-debit saldo rekening (kita memberi pinjaman ke orang)
+    // Hutang → opsional income (uang masuk ke rekening kita)
+    if (type == BillType.hutang && paymentMethod != null) {
+      final incomeAmount = nominal + transferFee;
+      final tx = TransactionModel(
+        id: 0,
+        userId: userId,
+        description: 'Hutang: ${name.trim()}',
+        category: TransactionCategory.income,
+        paymentMethodId: paymentMethod.id,
+        paymentMethodName: paymentMethod.name,
+        nominal: incomeAmount,
+        date: DateTime.now(),
+        notes: transferFee > 0
+            ? 'Pinjaman masuk: ${name.trim()} (termasuk biaya transfer)'
+            : 'Pinjaman masuk: ${name.trim()}',
+        categoryId: null,
+        categoryName: 'Hutang',
+        localCreatedAt: DateTime.now(),
+      );
+      await _transactionService.createTransaction(tx, isOnline);
+    }
+
+    // Piutang → opsional expense (uang keluar dari rekening kita)
     if (type == BillType.piutang && paymentMethod != null) {
       final debitAmount = nominal + transferFee;
-      final transaction = TransactionModel(
+      final tx = TransactionModel(
         id: 0,
         userId: userId,
         description: 'Piutang: ${name.trim()}',
@@ -86,14 +127,14 @@ class BillRepository {
         categoryName: 'Piutang',
         localCreatedAt: DateTime.now(),
       );
-      await _transactionService.createTransaction(transaction, isOnline);
+      await _transactionService.createTransaction(tx, isOnline);
     }
 
     return savedBill;
   }
 
   Future<void> updateBill(BillModel bill) async {
-    if (bill.name.trim().isEmpty) throw Exception('Nama tagihan tidak boleh kosong');
+    if (bill.name.trim().isEmpty) throw Exception('Nama tidak boleh kosong');
     if (bill.nominal <= 0) throw Exception('Nominal harus lebih dari 0');
     final isOnline = await _isOnline();
     await _service.updateBill(bill, isOnline);
@@ -108,52 +149,85 @@ class BillRepository {
   }) async {
     if (payAmount <= 0) throw Exception('Nominal bayar harus lebih dari 0');
 
-    final newPaid = (bill.paidAmount + payAmount).clamp(0, bill.nominal);
-    final updated = bill.copyWith(
-      paidAmount: newPaid,
-      status: newPaid >= bill.nominal ? BillStatus.paid : BillStatus.partial,
-      updatedAt: DateTime.now(),
-    );
-
     final isOnline = await _isOnline();
+    BillModel updated;
 
-    // Update bill
+    if (bill.type == BillType.tagihan) {
+      // Tagihan: increment installmentsPaid, status lunas jika maxInstallments tercapai
+      final newInstallmentsPaid = bill.installmentsPaid + 1;
+      final hasLimit = bill.maxInstallments != null;
+      final isFullyPaid =
+          hasLimit && newInstallmentsPaid >= bill.maxInstallments!;
+      final newPaidAmount = bill.paidAmount + payAmount;
+
+      updated = bill.copyWith(
+        paidAmount: newPaidAmount,
+        installmentsPaid: newInstallmentsPaid,
+        status: isFullyPaid ? BillStatus.paid : BillStatus.partial,
+        updatedAt: DateTime.now(),
+      );
+    } else {
+      // Hutang / Piutang: progress berdasarkan paidAmount vs nominal
+      final newPaid = (bill.paidAmount + payAmount).clamp(0, bill.nominal);
+      updated = bill.copyWith(
+        paidAmount: newPaid,
+        status:
+            newPaid >= bill.nominal ? BillStatus.paid : BillStatus.partial,
+        updatedAt: DateTime.now(),
+      );
+    }
+
     await _service.updateBill(updated, isOnline);
 
-    // Auto-create transaction
-    // Hutang → expense (uang keluar), Piutang → income (uang masuk)
-    final category = bill.type == BillType.hutang
-        ? TransactionCategory.expense
-        : TransactionCategory.income;
+    // Kategori transaksi per tipe:
+    // Hutang  → expense (kita bayar ke orang)
+    // Piutang → income  (kita terima dari orang)
+    // Tagihan → expense (kita bayar tagihan)
+    final txCategory = bill.type == BillType.piutang
+        ? TransactionCategory.income
+        : TransactionCategory.expense;
 
-    final txCategoryId = category == TransactionCategory.expense
+    final txCategoryId = txCategory == TransactionCategory.expense
         ? (bill.categoryId ?? 'uncategorized')
         : null;
-    final txCategoryName = category == TransactionCategory.expense
+    final txCategoryName = txCategory == TransactionCategory.expense
         ? (bill.categoryName ?? 'Lainnya')
         : null;
 
-    final transaction = TransactionModel(
+    final String txDesc;
+    if (bill.type == BillType.hutang) {
+      txDesc = 'Bayar hutang: ${bill.name}';
+    } else if (bill.type == BillType.piutang) {
+      txDesc = 'Terima piutang: ${bill.name}';
+    } else {
+      final inst = bill.installmentsPaid + 1;
+      final total = bill.maxInstallments;
+      txDesc = total != null
+          ? 'Tagihan ${bill.name} (cicilan $inst/$total)'
+          : 'Tagihan ${bill.name} (bulan ke-$inst)';
+    }
+
+    final tx = TransactionModel(
       id: 0,
       userId: bill.userId,
-      description: '${bill.type == BillType.hutang ? 'Bayar' : 'Terima'} ${bill.name}',
-      category: category,
+      description: txDesc,
+      category: txCategory,
       paymentMethodId: paymentMethod.id,
       paymentMethodName: paymentMethod.name,
       nominal: payAmount,
       date: DateTime.now(),
       notes: transferFee > 0
-          ? 'Pembayaran tagihan: ${bill.name} (biaya transfer: Rp $transferFee)'
-          : 'Pembayaran tagihan: ${bill.name}',
+          ? '$txDesc + biaya transfer Rp $transferFee'
+          : txDesc,
       categoryId: txCategoryId,
       categoryName: txCategoryName,
       localCreatedAt: DateTime.now(),
     );
-    await _transactionService.createTransaction(transaction, isOnline);
+    await _transactionService.createTransaction(tx, isOnline);
 
     // Biaya transfer → expense terpisah
     if (transferFee > 0) {
-      final feeTransaction = TransactionModel(
+      final feeTx = TransactionModel(
         id: 0,
         userId: bill.userId,
         description: 'Biaya transfer: ${bill.name}',
@@ -162,27 +236,40 @@ class BillRepository {
         paymentMethodName: paymentMethod.name,
         nominal: transferFee,
         date: DateTime.now(),
-        notes: 'Biaya transfer pembayaran tagihan: ${bill.name}',
+        notes: 'Biaya transfer pembayaran: ${bill.name}',
         categoryId: 'uncategorized',
         categoryName: 'Biaya Transfer',
         localCreatedAt: DateTime.now(),
       );
-      await _transactionService.createTransaction(feeTransaction, isOnline);
+      await _transactionService.createTransaction(feeTx, isOnline);
     }
   }
 
   Future<void> deleteBill(BillModel bill) async {
     final isOnline = await _isOnline();
-    await _service.deleteBill(bill.id, bill.userId, bill.firebaseDocId, isOnline);
+    await _service.deleteBill(
+        bill.id, bill.userId, bill.firebaseDocId, isOnline);
   }
 
   Future<List<BillModel>> getBills(String userId, {BillStatus? status}) async {
     return await _service.getBills(userId, status: status?.name);
   }
 
+  /// Get bills filtered by type
+  Future<List<BillModel>> getBillsByType(String userId, BillType type) async {
+    final all = await _service.getBills(userId);
+    return all
+        .where((b) => b.type == type && !b.isDeleted)
+        .toList()
+      ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+  }
+
   Future<List<BillModel>> getUnpaidBills(String userId) async {
-    final unpaid = await _service.getBills(userId, status: BillStatus.unpaid.name);
-    final partial = await _service.getBills(userId, status: BillStatus.partial.name);
-    return [...unpaid, ...partial]..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    final unpaid =
+        await _service.getBills(userId, status: BillStatus.unpaid.name);
+    final partial =
+        await _service.getBills(userId, status: BillStatus.partial.name);
+    return [...unpaid, ...partial]
+      ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
   }
 }

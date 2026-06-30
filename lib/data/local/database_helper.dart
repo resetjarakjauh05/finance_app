@@ -67,6 +67,22 @@ class DatabaseHelper {
           await db.execute("ALTER TABLE bills ADD COLUMN transferFee INTEGER NOT NULL DEFAULT 0");
           debugPrint('DB onOpen: added bills.transferFee');
         }
+        if (!billsColNames.contains('billingDay')) {
+          await db.execute("ALTER TABLE bills ADD COLUMN billingDay INTEGER");
+          debugPrint('DB onOpen: added bills.billingDay');
+        }
+        if (!billsColNames.contains('maxInstallments')) {
+          await db.execute("ALTER TABLE bills ADD COLUMN maxInstallments INTEGER");
+          debugPrint('DB onOpen: added bills.maxInstallments');
+        }
+        if (!billsColNames.contains('installmentAmount')) {
+          await db.execute("ALTER TABLE bills ADD COLUMN installmentAmount INTEGER");
+          debugPrint('DB onOpen: added bills.installmentAmount');
+        }
+        if (!billsColNames.contains('installmentsPaid')) {
+          await db.execute("ALTER TABLE bills ADD COLUMN installmentsPaid INTEGER NOT NULL DEFAULT 0");
+          debugPrint('DB onOpen: added bills.installmentsPaid');
+        }
 
         // Ensure custody table has all required columns
         final custodyCols = await db.rawQuery('PRAGMA table_info(custody)');
@@ -522,6 +538,10 @@ class DatabaseHelper {
         paymentMethodId TEXT,
         paymentMethodName TEXT,
         transferFee INTEGER NOT NULL DEFAULT 0,
+        billingDay INTEGER,
+        maxInstallments INTEGER,
+        installmentAmount INTEGER,
+        installmentsPaid INTEGER NOT NULL DEFAULT 0,
         isSynced INTEGER DEFAULT 0,
         syncedAt INTEGER,
         localCreatedAt INTEGER NOT NULL,

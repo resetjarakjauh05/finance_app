@@ -628,6 +628,10 @@ class SyncEngine extends ChangeNotifier {
     'paymentMethodId': data['paymentMethodId'],
     'paymentMethodName': data['paymentMethodName'],
     'transferFee': data['transferFee'] ?? 0,
+    'billingDay': data['billingDay'],
+    'maxInstallments': data['maxInstallments'],
+    'installmentAmount': data['installmentAmount'],
+    'installmentsPaid': data['installmentsPaid'] ?? 0,
     'createdAt': data['createdAt'] is String
         ? Timestamp.fromDate(DateTime.parse(data['createdAt'] as String))
         : FieldValue.serverTimestamp(),

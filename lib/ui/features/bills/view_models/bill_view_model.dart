@@ -51,6 +51,9 @@ class BillViewModel extends ChangeNotifier {
     String? categoryName,
     PaymentMethodModel? paymentMethod,
     int transferFee = 0,
+    int? billingDay,
+    int? maxInstallments,
+    int? installmentAmount,
     String? notes,
   }) async {
     _setLoading(true);
@@ -67,6 +70,9 @@ class BillViewModel extends ChangeNotifier {
         categoryName: categoryName,
         paymentMethod: paymentMethod,
         transferFee: transferFee,
+        billingDay: billingDay,
+        maxInstallments: maxInstallments,
+        installmentAmount: installmentAmount,
         notes: notes,
       );
       _setLoading(false);

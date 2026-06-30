@@ -23,6 +23,10 @@ _BillModel _$BillModelFromJson(Map<String, dynamic> json) => _BillModel(
   paymentMethodId: json['paymentMethodId'] as String?,
   paymentMethodName: json['paymentMethodName'] as String?,
   transferFee: (json['transferFee'] as num?)?.toInt() ?? 0,
+  billingDay: (json['billingDay'] as num?)?.toInt(),
+  maxInstallments: (json['maxInstallments'] as num?)?.toInt(),
+  installmentAmount: (json['installmentAmount'] as num?)?.toInt(),
+  installmentsPaid: (json['installmentsPaid'] as num?)?.toInt() ?? 0,
   isSynced: json['isSynced'] as bool? ?? false,
   syncedAt: json['syncedAt'] == null
       ? null
@@ -52,6 +56,10 @@ Map<String, dynamic> _$BillModelToJson(_BillModel instance) =>
       'paymentMethodId': instance.paymentMethodId,
       'paymentMethodName': instance.paymentMethodName,
       'transferFee': instance.transferFee,
+      'billingDay': instance.billingDay,
+      'maxInstallments': instance.maxInstallments,
+      'installmentAmount': instance.installmentAmount,
+      'installmentsPaid': instance.installmentsPaid,
       'isSynced': instance.isSynced,
       'syncedAt': instance.syncedAt?.toIso8601String(),
       'localCreatedAt': instance.localCreatedAt.toIso8601String(),
@@ -68,4 +76,5 @@ const _$BillStatusEnumMap = {
 const _$BillTypeEnumMap = {
   BillType.hutang: 'hutang',
   BillType.piutang: 'piutang',
+  BillType.tagihan: 'tagihan',
 };
