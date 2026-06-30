@@ -40,6 +40,7 @@ class _BillsScreenState extends State<BillsScreen>
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _viewModel = BillViewModel(
       repository: BillRepository(service: BillService()),
       userId: widget.userId,
