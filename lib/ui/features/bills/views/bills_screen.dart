@@ -11,6 +11,7 @@ import '../../../core/currency_input_formatter.dart';
 import '../../../core/widgets.dart';
 import '../view_models/bill_view_model.dart';
 import 'add_edit_bill_screen.dart';
+import 'bill_history_screen.dart';
 
 class BillsScreen extends StatefulWidget {
   final String userId;
@@ -448,6 +449,18 @@ class _BillsScreenState extends State<BillsScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => BillHistoryScreen(
+                        userId: widget.userId,
+                        bill: bill,
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.history, size: 16),
+                  label: const Text('Riwayat'),
+                ),
                 if (showPay && bill.status != BillStatus.paid)
                   TextButton.icon(
                     onPressed: () => _handlePay(bill),
