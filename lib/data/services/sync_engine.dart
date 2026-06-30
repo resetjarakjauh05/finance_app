@@ -10,6 +10,7 @@ import '../local/custody_dao.dart';
 import '../local/custody_movement_dao.dart';
 import '../local/category_dao.dart';
 import '../local/payment_method_dao.dart';
+import '../local/savings_plan_dao.dart';
 import '../../domain/models/payment_method_model.dart';
 import 'connectivity_service.dart';
 
@@ -22,6 +23,8 @@ class SyncEngine extends ChangeNotifier {
   final CustodyMovementDao _custodyMovementDao;
   final CategoryDao _categoryDao;
   final PaymentMethodDao _paymentMethodDao;
+  final SavingsPlanDao _savingsPlanDao;
+  final SavingsAllocationDao _savingsAllocationDao;
   final ConnectivityService _connectivityService;
   final FirebaseFirestore _firestore;
 
@@ -45,6 +48,8 @@ class SyncEngine extends ChangeNotifier {
     CustodyMovementDao? custodyMovementDao,
     CategoryDao? categoryDao,
     PaymentMethodDao? paymentMethodDao,
+    SavingsPlanDao? savingsPlanDao,
+    SavingsAllocationDao? savingsAllocationDao,
     ConnectivityService? connectivityService,
     FirebaseFirestore? firestore,
   })  : _pendingOpsDao = pendingOpsDao ?? PendingOperationsDao(),
@@ -55,6 +60,8 @@ class SyncEngine extends ChangeNotifier {
         _custodyMovementDao = custodyMovementDao ?? CustodyMovementDao(),
         _categoryDao = categoryDao ?? CategoryDao(),
         _paymentMethodDao = paymentMethodDao ?? PaymentMethodDao(),
+        _savingsPlanDao = savingsPlanDao ?? SavingsPlanDao(),
+        _savingsAllocationDao = savingsAllocationDao ?? SavingsAllocationDao(),
         _connectivityService = connectivityService ?? ConnectivityService(),
         _firestore = firestore ?? FirebaseFirestore.instance;
 
@@ -155,9 +162,9 @@ class SyncEngine extends ChangeNotifier {
           );
           break;
         case 'savings_allocations':
-          await _syncGenericUserSubcollection(
+          await _syncSavingsAllocation(
             operation: operation, firebaseDocId: firebaseDocId,
-            data: data, subcollection: 'savings_allocations',
+            data: data,
           );
           break;
         case 'payment_methods':
@@ -483,6 +490,48 @@ class SyncEngine extends ChangeNotifier {
           'deletedAt': FieldValue.serverTimestamp(),
         });
         break;
+    }
+  }
+
+  Future<void> _syncSavingsAllocation({
+    required String operation,
+    String? firebaseDocId,
+    required Map<String, dynamic> data,
+  }) async {
+    // Sync ke Firestore via generic handler
+    await _syncGenericUserSubcollection(
+      operation: operation,
+      firebaseDocId: firebaseDocId,
+      data: data,
+      subcollection: 'savings_allocations',
+    );
+
+    // Setelah sync, recalculate savedAmount di SQLite + update Firestore plan
+    // Ini fix bug: offline allocation tidak update progres saat baru online
+    try {
+      final planId = data['savingsPlanId'] as String?;
+      final userId = data['userId'] as String?;
+      if (planId == null || userId == null) return;
+
+      final allocs = await _savingsAllocationDao.getByPlanId(planId);
+      final totalSaved = allocs.fold<int>(0, (s, a) => s + a.amount);
+      await _savingsPlanDao.updateSavedAmount(planId, totalSaved);
+
+      // Sync savedAmount ke Firestore plan juga
+      final plan = await _savingsPlanDao.getById(planId);
+      if (plan?.firebaseDocId != null) {
+        await _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('savings_plans')
+            .doc(plan!.firebaseDocId)
+            .update({
+          'savedAmount': totalSaved,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('SyncEngine._syncSavingsAllocation recalc error: $e');
     }
   }
 
