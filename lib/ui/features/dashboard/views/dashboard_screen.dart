@@ -379,7 +379,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildHomeTab(user) {
+  Widget _buildHomeTab(dynamic user) {
     return RefreshIndicator(
       onRefresh: _loadDashboardData,
       child: SingleChildScrollView(
@@ -974,7 +974,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildMoreTab(user) {
+  Widget _buildMoreTab(dynamic user) {
     return ListView(
       children: [
         ListTile(
