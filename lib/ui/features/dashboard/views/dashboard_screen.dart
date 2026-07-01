@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../data/services/auth_service.dart';
 import '../../../../data/services/transaction_service.dart';
 import '../../../../data/services/notification_service.dart';
@@ -107,6 +108,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         await notif.saveTokenToFirestore(user.id);
         await notif.checkBillsDue(user.id);
         _prefetchOfflineData(user.id);
+        _runMigrationOnce(user.id);
       });
     } else if (!_authViewModel.isAuthenticated) {
       // Reset saat logout agar login ulang trigger load
@@ -129,6 +131,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       debugPrint('Dashboard: payment methods pre-fetched & cached');
     } catch (e) {
       debugPrint('Dashboard: payment method pre-fetch error: $e');
+    }
+  }
+
+  /// Jalankan migration data lama sekali saja per user
+  /// Flag: SharedPreferences 'migration_category_v1_{userId}'
+  void _runMigrationOnce(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'migration_category_v1_$userId';
+      if (prefs.getBool(key) == true) return; // sudah pernah jalan
+
+      debugPrint('Dashboard: running category migration for $userId...');
+      final service = TransactionService();
+      await service.migrateOldTransactions(userId);
+
+      await prefs.setBool(key, true);
+      debugPrint('Dashboard: category migration done');
+    } catch (e) {
+      debugPrint('Dashboard: migration error (non-fatal): $e');
+      // Tidak set flag agar retry saat app buka berikutnya
     }
   }
 

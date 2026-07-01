@@ -468,6 +468,67 @@ class TransactionService {
     return await _transactionDao.getTotalByCategory(userId, category);
   }
 
+  /// Migrate transaksi lama: update categoryId NULL → preset default
+  /// SQLite: bulk update via DAO
+  /// Firestore: batch update hanya transaksi yg sudah synced & punya firebaseDocId
+  /// Dipanggil sekali via SharedPreferences flag 'migration_category_v1_done'
+  Future<void> migrateOldTransactions(String userId) async {
+    try {
+      // 1. Fix SQLite — set isSynced=0 agar sync engine upload ulang ke Firestore
+      final count = await _transactionDao.migrateNullCategoryId(userId);
+      debugPrint('migrateOldTransactions: $count rows updated in SQLite');
+      if (count == 0) return; // Tidak ada yg perlu di-migrate
+
+      // 2. Fix Firestore — ambil semua transaksi yg categoryId NULL di Firestore
+      final isOnline = await _connectivity.isOnline();
+      if (!isOnline) {
+        // Offline: biarkan sync engine upload saat online nanti (isSynced=0)
+        debugPrint('migrateOldTransactions: offline, Firestore fix deferred to sync engine');
+        return;
+      }
+
+      final snap = await _firestore
+          .collection('transactions')
+          .doc(userId)
+          .collection('items')
+          .where('categoryId', isNull: true)
+          .get();
+
+      if (snap.docs.isEmpty) return;
+
+      // Batch update Firestore — max 500 per batch
+      var batch = _firestore.batch();
+      int batchCount = 0;
+
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        if (data['isDeleted'] == true) continue;
+        final cat = data['category'] as String? ?? 'expense';
+        final categoryId = cat == 'income' ? 'preset_gaji' : 'preset_lainnya';
+        final categoryName = cat == 'income' ? 'Gaji & Pendapatan' : 'Lainnya';
+
+        batch.update(doc.reference, {
+          'categoryId': categoryId,
+          'categoryName': categoryName,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        batchCount++;
+
+        if (batchCount == 500) {
+          await batch.commit();
+          batch = _firestore.batch();
+          batchCount = 0;
+        }
+      }
+
+      if (batchCount > 0) await batch.commit();
+      debugPrint('migrateOldTransactions: ${snap.docs.length} Firestore docs updated');
+    } catch (e) {
+      debugPrint('migrateOldTransactions error: $e');
+      // Jangan rethrow — migration gagal tidak boleh crash app
+    }
+  }
+
   /// Get unsynced transactions count
   Future<int> getUnsyncedCount(String userId) async {
     final unsynced = await _transactionDao.getUnsyncedByUserId(userId);

@@ -209,7 +209,37 @@ class TransactionDao {
     );
   }
 
-  /// Filter transactions, return List of TransactionModel (dipakai SpendingLimitService)
+  /// Migrate transaksi lama: set default categoryId berdasarkan category
+  /// expense NULL → preset_lainnya, income NULL → preset_gaji
+  /// Dipanggil sekali saat upgrade app via SharedPreferences flag
+  Future<int> migrateNullCategoryId(String userId) async {
+    final db = await _dbHelper.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    final updatedExpense = await db.rawUpdate('''
+      UPDATE transactions
+      SET categoryId = 'preset_lainnya',
+          categoryName = 'Lainnya',
+          updatedAt = ?,
+          isSynced = 0
+      WHERE userId = ? AND isDeleted = 0
+        AND (categoryId IS NULL OR categoryId = '')
+        AND category = 'expense'
+    ''', [now, userId]);
+
+    final updatedIncome = await db.rawUpdate('''
+      UPDATE transactions
+      SET categoryId = 'preset_gaji',
+          categoryName = 'Gaji & Pendapatan',
+          updatedAt = ?,
+          isSynced = 0
+      WHERE userId = ? AND isDeleted = 0
+        AND (categoryId IS NULL OR categoryId = '')
+        AND category = 'income'
+    ''', [now, userId]);
+
+    return updatedExpense + updatedIncome;
+  }
   Future<List<TransactionModel>> filterTransactions(
     String userId, {
     String? category,
