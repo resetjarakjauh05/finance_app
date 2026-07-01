@@ -605,6 +605,10 @@ class SyncEngine extends ChangeNotifier {
         ? Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(data['date'] as int))
         : data['date'],
     'notes': data['notes'],
+    // FIX BUG: categoryId & categoryName wajib disertakan agar tidak hilang saat sync
+    'categoryId': data['categoryId'],
+    'categoryName': data['categoryName'],
+    'isDeleted': data['isDeleted'] ?? false,
     'createdAt': FieldValue.serverTimestamp(),
     'updatedAt': FieldValue.serverTimestamp(),
   };

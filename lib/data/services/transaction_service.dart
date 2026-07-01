@@ -385,6 +385,9 @@ class TransactionService {
             nominal: (data['nominal'] as num).toInt(),
             date: (data['date'] as Timestamp).toDate(),
             notes: data['notes'] as String?,
+            // FIX BUG 3: map categoryId & categoryName dari Firestore → SQLite
+            categoryId: data['categoryId'] as String?,
+            categoryName: data['categoryName'] as String?,
             isSynced: true,
             syncedAt: DateTime.now(),
             localCreatedAt: data['createdAt'] != null
@@ -425,6 +428,20 @@ class TransactionService {
           balances[id] = (balances[id] ?? 0) +
               (cat == 'income' ? nominal : -nominal);
         }
+
+        // FIX BUG 4: merge transaksi offline yg belum sync ke Firestore
+        // Tanpa ini, saldo hilang saat online karena Firestore belum punya data offline
+        final unsynced = await _transactionDao.getUnsyncedByUserId(userId);
+        for (final row in unsynced) {
+          if ((row['isDeleted'] as int? ?? 0) == 1) continue;
+          final id = row['paymentMethodId'] as String? ?? '';
+          if (id.isEmpty) continue;
+          final nominal = (row['nominal'] as num?)?.toInt() ?? 0;
+          final cat = row['category'] as String? ?? '';
+          balances[id] = (balances[id] ?? 0) +
+              (cat == 'income' ? nominal : -nominal);
+        }
+
         return balances;
       } catch (e) {
         debugPrint('getBalancePerPaymentMethod Firestore error, fallback: $e');
@@ -545,6 +562,10 @@ class TransactionService {
         'nominal': transaction.nominal,
         'date': transaction.date.millisecondsSinceEpoch,
         'notes': transaction.notes,
+        // FIX BUG 1: categoryId & categoryName wajib ada di queue data
+        // Tanpa ini, saat sync ke Firestore field ini NULL → hilang permanen
+        'categoryId': transaction.categoryId,
+        'categoryName': transaction.categoryName,
         'firebaseDocId': transaction.firebaseDocId,
         'isSynced': transaction.isSynced,
         'localCreatedAt': transaction.localCreatedAt.millisecondsSinceEpoch,

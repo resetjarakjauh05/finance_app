@@ -1,4 +1,4 @@
-# Session Summary — 1 Juli 2026
+# Session Summary — 1 Juli 2026 (updated)
 
 ## Stack
 - Flutter 3.44.4 + Dart 3.8+ (stable)
@@ -152,6 +152,34 @@ static DateTime _parseDateTime(dynamic value) {
   return DateTime.now();
 }
 ```
+
+## Sesi Terbaru (2 Juli 2026) — Bug Fix Kritis Sync Offline→Online
+
+### Bug: Kategori & metode pembayaran kosong + saldo hilang setelah kembali online
+
+**Root Causes & Fix:**
+
+#### BUG 1 & 2: `categoryId` / `categoryName` tidak ikut di-queue & tidak dikirim ke Firestore
+- `_queueForSync` di `transaction_service.dart` → data map tidak include `categoryId` & `categoryName`
+- `_toTransactionFirestore` di `sync_engine.dart` → field map tidak include `categoryId` & `categoryName`
+- **Efek:** Transaksi offline saat sync ke Firestore → `categoryId`/`categoryName` NULL permanent di Firestore
+- **Fix:** Tambah `categoryId` & `categoryName` di kedua map + tambah `isDeleted` di `_toTransactionFirestore`
+
+#### BUG 3: `initialSyncFromFirestore` tidak map `categoryId` & `categoryName`
+- Fungsi di `transaction_service.dart` line ~380 → construct `TransactionModel` tanpa `categoryId`/`categoryName`
+- **Efek:** Reinstall/device baru → SQLite isi dari Firestore tapi field category tetap NULL
+- **Fix:** Tambah `categoryId: data['categoryId']` & `categoryName: data['categoryName']` saat parse doc
+
+#### BUG 4: `getBalancePerPaymentMethod` skip transaksi offline yg belum sync
+- Saat online → ambil saldo dari Firestore only → transaksi offline (belum sync) tidak terhitung
+- **Efek:** Saldo "hilang" saat kembali online padahal data ada di SQLite
+- **Fix:** Setelah hitung dari Firestore, merge unsynced rows dari SQLite (`getUnsyncedByUserId`)
+
+**Files changed:**
+- `lib/data/services/transaction_service.dart` — `_queueForSync`, `initialSyncFromFirestore`, `getBalancePerPaymentMethod`
+- `lib/data/services/sync_engine.dart` — `_toTransactionFirestore`
+
+---
 
 ## Known Issues / Belum Selesai
 - Warning: `json_annotation ^4.9.0` allows pre-4.12.0 → pertimbangkan upgrade
