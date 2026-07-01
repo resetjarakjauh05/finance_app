@@ -526,18 +526,6 @@ class _ReportsScreenState extends State<ReportsScreen>
         }),
       ],
     );
-  }yle(fontSize: 13))),
-                  Text('${pct.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  const SizedBox(width: 8),
-                  Text(_currencyFormat.format(e.value.value),
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
   }
 
   Widget _summaryCard(String label, int amount, Color color, IconData icon) {
