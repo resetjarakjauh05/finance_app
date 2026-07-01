@@ -37,12 +37,12 @@ class SpendingLimitService {
     final isOnline = await _connectivity.isOnline();
     if (isOnline) {
       try {
-        final snap = await _col(userId)
-            .where('isDeleted', isEqualTo: false)
-            .where('isActive', isEqualTo: true)
-            .get();
+        // FIX: hapus filter isDeleted di Firestore — doc lama tidak punya field tsb
+        // → Firestore skip → 0 docs → reinstall = kosong. Filter client-side.
+        final snap = await _col(userId).get();
         final limits = snap.docs
             .map((d) => _fromFirestore(d.id, d.data(), userId))
+            .where((l) => l.isActive && !l.isDeleted)
             .toList();
         await _cacheToSqlite(limits);
 
@@ -203,10 +203,16 @@ class SpendingLimitService {
       isDeleted: data['isDeleted'] as bool? ?? false,
       isSynced: true,
       syncedAt: DateTime.now(),
-      localCreatedAt: data['createdAt'] != null
-          ? (data['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
+      localCreatedAt: _parseDateTime(data['createdAt']),
     );
+  }
+
+  /// Parse DateTime — handle Timestamp (Firestore) atau String ISO (doc lama)
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    return DateTime.now();
   }
 
   Map<String, dynamic> _toFirestore(SpendingLimitModel l) => {

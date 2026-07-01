@@ -10,8 +10,9 @@ class SavingsPlanRepository {
   Future<List<SavingsPlanModel>> getPlans(String userId) =>
       _service.getPlans(userId);
 
-  Future<List<SavingsAllocationModel>> getAllocations(String planId) =>
-      _service.getAllocations(planId);
+  Future<List<SavingsAllocationModel>> getAllocations(
+          String planId, String userId) =>
+      _service.getAllocations(planId, userId);
 
   Future<SavingsPlanModel> createPlan({
     required String userId,

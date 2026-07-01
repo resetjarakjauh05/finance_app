@@ -99,7 +99,9 @@ class CustodyService {
         final custodies = <CustodyModel>[];
         for (final doc in snapshot.docs) {
           try {
-            custodies.add(_custodyFromFirestore(doc.id, doc.data() as Map<String, dynamic>));
+            final c = _custodyFromFirestore(doc.id, doc.data() as Map<String, dynamic>);
+            // Filter client-side: skip soft-deleted
+            if (!c.isDeleted) custodies.add(c);
           } catch (e) {
             debugPrint('getCustodies skip ${doc.id}: $e');
           }
@@ -327,12 +329,19 @@ class CustodyService {
       totalNominal: (data['totalNominal'] as num).toInt(),
       type: CustodyTypeExtension.fromString(data['type'] as String? ?? 'DITERIMA'),
       currentBalance: (data['currentBalance'] as num?)?.toInt() ?? 0,
+      isDeleted: (data['isDeleted'] as bool?) ?? false,
       isSynced: true,
       syncedAt: DateTime.now(),
-      localCreatedAt: data['createdAt'] != null
-          ? (data['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
+      localCreatedAt: _parseDateTime(data['createdAt']),
     );
+  }
+
+  /// Parse DateTime — handle Timestamp (Firestore) atau String ISO (doc lama)
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    return DateTime.now();
   }
 
   CustodyMovementModel _movFromFirestore(

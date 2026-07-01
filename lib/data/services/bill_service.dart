@@ -94,6 +94,9 @@ class BillService {
     final isOnline = await _connectivity.isOnline();
     if (isOnline) {
       try {
+        // FIX: jangan filter isDeleted di Firestore — doc lama mungkin tidak punya
+        // field tsb → Firestore skip → reinstall = kosong. Filter client-side.
+        // Status filter tetap server-side (indexed).
         var query = _col(userId) as Query<Map<String, dynamic>>;
         if (status != null) {
           query = query.where('status', isEqualTo: status);
@@ -102,7 +105,9 @@ class BillService {
         final bills = <BillModel>[];
         for (final doc in snapshot.docs) {
           try {
-            bills.add(_fromFirestore(doc.id, doc.data()));
+            final bill = _fromFirestore(doc.id, doc.data());
+            // Filter client-side: skip soft-deleted
+            if (!bill.isDeleted) bills.add(bill);
           } catch (e) {
             debugPrint('getBills skip ${doc.id}: $e');
           }
@@ -154,6 +159,8 @@ class BillService {
       maxInstallments: (data['maxInstallments'] as num?)?.toInt(),
       installmentAmount: (data['installmentAmount'] as num?)?.toInt(),
       installmentsPaid: (data['installmentsPaid'] as num?)?.toInt() ?? 0,
+      // FIX: doc lama mungkin tidak punya field isDeleted → default false
+      isDeleted: (data['isDeleted'] as bool?) ?? false,
       isSynced: true,
       syncedAt: DateTime.now(),
       localCreatedAt: data['createdAt'] != null
@@ -226,6 +233,7 @@ class BillService {
     'maxInstallments': b.maxInstallments,
     'installmentAmount': b.installmentAmount,
     'installmentsPaid': b.installmentsPaid,
+    'isDeleted': b.isDeleted,
     'updatedAt': b.updatedAt != null
         ? Timestamp.fromDate(b.updatedAt!)
         : FieldValue.serverTimestamp(),

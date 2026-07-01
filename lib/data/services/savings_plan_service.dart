@@ -43,15 +43,13 @@ class SavingsPlanService {
     final isOnline = await _connectivity.isOnline();
     if (isOnline) {
       try {
-        // FIX: hapus filter isActive di Firestore — dokumen lama mungkin tidak
-        // punya field isActive sehingga Firestore query skip mereka.
-        // Filter dilakukan client-side agar data lama tetap muncul.
+        // FIX: hapus filter isDeleted di Firestore — doc lama tidak punya field tsb
+        // → Firestore skip → 0 docs → reinstall = kosong. Filter client-side.
         final snap = await _col(userId)
-            .where('isDeleted', isEqualTo: false)
             .get();
         final plans = snap.docs
             .map((d) => _planFromFirestore(d.id, d.data(), userId))
-            .where((p) => p.isActive)
+            .where((p) => p.isActive && !p.isDeleted)
             .toList();
         await _cachePlansToSqlite(plans);
 
@@ -79,9 +77,64 @@ class SavingsPlanService {
     return _dao.getPlans(userId);
   }
 
-  /// Get allocations — Firestore-first, fallback SQLite
-  Future<List<SavingsAllocationModel>> getAllocations(String planId) async {
+  /// Get allocations — Firestore-first, cache ke SQLite, fallback SQLite
+  /// BUG-FIX: sebelumnya hanya baca SQLite lokal → reinstall = allocations kosong
+  /// → savedAmount selalu 0 meski Firestore punya data.
+  Future<List<SavingsAllocationModel>> getAllocations(
+      String planId, String userId) async {
+    final isOnline = await _connectivity.isOnline();
+    if (isOnline) {
+      try {
+        final snap = await _allocCol(userId)
+            .where('savingsPlanId', isEqualTo: planId)
+            .where('isDeleted', isEqualTo: false)
+            .orderBy('date', descending: true)
+            .get();
+        final allocations = snap.docs
+            .map((d) => _allocFromFirestore(d.id, d.data()))
+            .toList();
+        // Cache ke SQLite agar tersedia offline
+        for (final a in allocations) {
+          await _allocDao.insert(a);
+        }
+        // Merge allocation offline yang belum sync
+        final allLocal = await _allocDao.getByPlanId(planId);
+        final firestoreIds = allocations.map((a) => a.id).toSet();
+        final unsyncedLocal = allLocal
+            .where((a) => !firestoreIds.contains(a.id))
+            .toList();
+        if (unsyncedLocal.isNotEmpty) {
+          final merged = [...allocations, ...unsyncedLocal];
+          merged.sort((a, b) => b.date.compareTo(a.date));
+          return merged;
+        }
+        return allocations;
+      } catch (e) {
+        debugPrint('SavingsPlanService.getAllocations Firestore error: $e');
+      }
+    }
     return _allocDao.getByPlanId(planId);
+  }
+
+  SavingsAllocationModel _allocFromFirestore(
+      String docId, Map<String, dynamic> data) {
+    return SavingsAllocationModel(
+      id: data['id'] as String? ?? docId,
+      userId: data['userId'] as String? ?? '',
+      savingsPlanId: data['savingsPlanId'] as String,
+      amount: (data['amount'] as num).toInt(),
+      notes: data['notes'] as String?,
+      date: (data['date'] as Timestamp).toDate(),
+      fromPaymentMethodId: data['fromPaymentMethodId'] as String? ?? '',
+      fromPaymentMethodName: data['fromPaymentMethodName'] as String? ?? '',
+      toPaymentMethodId: data['toPaymentMethodId'] as String?,
+      toPaymentMethodName: data['toPaymentMethodName'] as String?,
+      transferFee: (data['transferFee'] as num?)?.toInt() ?? 0,
+      isSynced: true,
+      localCreatedAt: data['createdAt'] != null
+          ? (data['createdAt'] as Timestamp).toDate()
+          : DateTime.now(),
+    );
   }
 
   /// Create plan — Firestore-first, offline queue fallback
@@ -376,18 +429,30 @@ class SavingsPlanService {
       targetAmount: (data['targetAmount'] as num).toInt(),
       savedAmount: (data['savedAmount'] as num?)?.toInt() ?? 0,
       monthlyTarget: (data['monthlyTarget'] as num?)?.toInt() ?? 0,
-      targetDate: data['targetDate'] != null
-          ? (data['targetDate'] as Timestamp).toDate()
-          : null,
+      targetDate: _parseDateTimeNullable(data['targetDate']),
       savingsPaymentMethodId: data['savingsPaymentMethodId'] as String?,
       savingsPaymentMethodName: data['savingsPaymentMethodName'] as String?,
       isActive: data['isActive'] as bool? ?? true,
+      isDeleted: data['isDeleted'] as bool? ?? false,
       isSynced: true,
       syncedAt: DateTime.now(),
-      localCreatedAt: data['createdAt'] != null
-          ? (data['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
+      localCreatedAt: _parseDateTime(data['createdAt']),
     );
+  }
+
+  /// Parse createdAt/targetDate — bisa Timestamp (Firestore) atau String ISO (queue lama)
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    return DateTime.now();
+  }
+
+  static DateTime? _parseDateTimeNullable(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
   Map<String, dynamic> _planToFirestore(SavingsPlanModel p) => {

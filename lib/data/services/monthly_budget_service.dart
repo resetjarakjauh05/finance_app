@@ -41,12 +41,14 @@ class MonthlyBudgetService {
     final isOnline = await _connectivity.isOnline();
     if (isOnline) {
       try {
+        // FIX: hapus filter isDeleted di Firestore — doc lama tidak punya field tsb
+        // → Firestore skip → 0 docs → reinstall = kosong. Filter client-side.
         final snap = await _col(userId)
             .where('yearMonth', isEqualTo: yearMonth)
-            .where('isDeleted', isEqualTo: false)
             .get();
         final budgets = snap.docs
             .map((d) => _fromFirestore(d.id, d.data(), userId))
+            .where((b) => !b.isDeleted)
             .toList();
         // Cache ke SQLite (await, tidak fire-and-forget)
         await _cacheToSqlite(budgets);
@@ -220,12 +222,19 @@ class MonthlyBudgetService {
       categoryIcon: data['categoryIcon'] as String? ?? '📦',
       budgetAmount: (data['budgetAmount'] as num).toInt(),
       notes: data['notes'] as String?,
+      isDeleted: (data['isDeleted'] as bool?) ?? false,
       isSynced: true,
       syncedAt: DateTime.now(),
-      localCreatedAt: data['createdAt'] != null
-          ? (data['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
+      localCreatedAt: _parseDateTime(data['createdAt']),
     );
+  }
+
+  /// Parse DateTime — handle Timestamp (Firestore) atau String ISO (doc lama)
+  static DateTime _parseDateTime(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    return DateTime.now();
   }
 
   Map<String, dynamic> _toFirestore(MonthlyBudgetModel b) => {

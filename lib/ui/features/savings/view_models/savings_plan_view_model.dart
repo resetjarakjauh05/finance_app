@@ -40,7 +40,7 @@ class SavingsPlanViewModel extends ChangeNotifier {
       _plans = await _repository.getPlans(userId);
       _allocations = {};
       for (final p in _plans) {
-        _allocations[p.id] = await _repository.getAllocations(p.id);
+        _allocations[p.id] = await _repository.getAllocations(p.id, userId);
       }
       _status = SavingsPlanStatus.loaded;
     } catch (e) {

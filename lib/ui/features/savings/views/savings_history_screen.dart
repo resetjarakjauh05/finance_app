@@ -45,7 +45,7 @@ class _SavingsHistoryScreenState extends State<SavingsHistoryScreen> {
           allocDao: SavingsAllocationDao(),
         ),
       );
-      final allocs = await repo.getAllocations(widget.plan.id);
+      final allocs = await repo.getAllocations(widget.plan.id, widget.userId);
       // Sort terbaru dulu
       allocs.sort((a, b) => b.date.compareTo(a.date));
       if (mounted) setState(() { _allocations = allocs; _isLoading = false; });
@@ -209,7 +209,7 @@ class _SavingsHistoryScreenState extends State<SavingsHistoryScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 16, vertical: 8),
                               itemCount: _allocations.length,
-                              separatorBuilder: (_, __) =>
+                              separatorBuilder: (_, _) =>
                                   const SizedBox(height: 8),
                               itemBuilder: (context, i) {
                                 final a = _allocations[i];
