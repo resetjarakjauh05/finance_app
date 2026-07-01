@@ -251,8 +251,39 @@ class TransactionRepository {
   Future<List<Map<String, dynamic>>> getMonthlySummary(
     String userId, {
     int months = 6,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
     final results = <Map<String, dynamic>>[];
+
+    // Jika startDate/endDate diberikan, iterasi per bulan dalam range tersebut
+    if (startDate != null && endDate != null) {
+      DateTime cursor = DateTime(startDate.year, startDate.month, 1);
+      while (!cursor.isAfter(DateTime(endDate.year, endDate.month, 1))) {
+        final endCursor = DateTime(cursor.year, cursor.month + 1, 0, 23, 59, 59);
+        final transactions = await _service.filterTransactions(
+          userId,
+          startDate: cursor,
+          endDate: endCursor,
+        );
+        final income = transactions
+            .where((t) => t.category == TransactionCategory.income)
+            .fold<int>(0, (sum, t) => sum + t.nominal);
+        final expense = transactions
+            .where((t) => t.category == TransactionCategory.expense)
+            .fold<int>(0, (sum, t) => sum + t.nominal);
+        results.add({
+          'month': cursor,
+          'income': income,
+          'expense': expense,
+          'net': income - expense,
+        });
+        cursor = DateTime(cursor.year, cursor.month + 1, 1);
+      }
+      return results;
+    }
+
+    // Default: N bulan terakhir
     final now = DateTime.now();
     for (int i = months - 1; i >= 0; i--) {
       final month = DateTime(now.year, now.month - i, 1);
@@ -278,21 +309,21 @@ class TransactionRepository {
     return results;
   }
 
-  /// Get category breakdown (expense by categoryName)
+  /// Get category breakdown by expense atau income
   Future<Map<String, int>> getCategoryBreakdown(
     String userId, {
     DateTime? startDate,
     DateTime? endDate,
+    TransactionCategory category = TransactionCategory.expense,
   }) async {
     final transactions = await _service.filterTransactions(
       userId,
-      category: TransactionCategory.expense.name,
+      category: category.name,
       startDate: startDate,
       endDate: endDate,
     );
     final breakdown = <String, int>{};
     for (final t in transactions) {
-      // Pakai categoryName jika ada, fallback ke paymentMethodName
       final key = t.categoryName ?? t.paymentMethodName;
       breakdown[key] = (breakdown[key] ?? 0) + t.nominal;
     }

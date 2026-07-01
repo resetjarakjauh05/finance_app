@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../data/services/transaction_service.dart';
 import '../../../../data/services/csv_export_service.dart';
 import '../../../../data/repositories/transaction_repository.dart';
+import '../../../../domain/models/transaction_model.dart';
 
 /// Pilihan range laporan
 enum _ReportRange { thisMonth, last3Months, last6Months, thisYear, lastYear, custom }
@@ -70,6 +71,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   bool _isLoading = false;
   List<Map<String, dynamic>> _monthlySummary = [];
   Map<String, int> _categoryBreakdown = {};
+  Map<String, int> _incomeCategoryBreakdown = {};
   int _totalIncome = 0;
   int _totalExpense = 0;
 
@@ -103,8 +105,13 @@ class _ReportsScreenState extends State<ReportsScreen>
       final months = _selectedRange.months;
 
       final results = await Future.wait([
-        repo.getMonthlySummary(widget.userId, months: months),
+        repo.getMonthlySummary(widget.userId,
+            months: _selectedRange.months,
+            startDate: _selectedRange == _ReportRange.custom ? _startDate : null,
+            endDate: _selectedRange == _ReportRange.custom ? _endDate : null),
         repo.getCategoryBreakdown(widget.userId, startDate: start, endDate: end),
+        repo.getCategoryBreakdown(widget.userId, startDate: start, endDate: end,
+            category: TransactionCategory.income),
         repo.getTotalIncome(widget.userId, startDate: start, endDate: end),
         repo.getTotalExpense(widget.userId, startDate: start, endDate: end),
       ]);
@@ -112,8 +119,9 @@ class _ReportsScreenState extends State<ReportsScreen>
         setState(() {
           _monthlySummary = results[0] as List<Map<String, dynamic>>;
           _categoryBreakdown = results[1] as Map<String, int>;
-          _totalIncome = results[2] as int;
-          _totalExpense = results[3] as int;
+          _incomeCategoryBreakdown = results[2] as Map<String, int>;
+          _totalIncome = results[3] as int;
+          _totalExpense = results[4] as int;
           _isLoading = false;
         });
       }
@@ -420,12 +428,13 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // ===== CATEGORY TAB =====
   Widget _buildCategoryTab() {
-    if (_categoryBreakdown.isEmpty) {
-      return const Center(child: Text('Tidak ada data pengeluaran untuk periode ini'));
+    final hasExpense = _categoryBreakdown.isNotEmpty;
+    final hasIncome = _incomeCategoryBreakdown.isNotEmpty;
+
+    if (!hasExpense && !hasIncome) {
+      return const Center(child: Text('Tidak ada data kategori untuk periode ini'));
     }
-    final sorted = _categoryBreakdown.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final total = sorted.fold<int>(0, (s, e) => s + e.value);
+
     final colors = [
       Colors.blue, Colors.orange, Colors.purple, Colors.teal,
       Colors.pink, Colors.indigo, Colors.brown, Colors.cyan,
@@ -437,42 +446,87 @@ class _ReportsScreenState extends State<ReportsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Pengeluaran per Kategori',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          if (sorted.isNotEmpty)
-            SizedBox(
-              height: 220,
-              child: PieChart(
-                PieChartData(
-                  sections: sorted.take(8).toList().asMap().entries.map((e) {
-                    final pct = total > 0 ? (e.value.value / total * 100) : 0.0;
-                    return PieChartSectionData(
-                      value: e.value.value.toDouble(),
-                      color: colors[e.key % colors.length],
-                      title: '${pct.toStringAsFixed(0)}%',
-                      titleStyle: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                      radius: 80,
-                    );
-                  }).toList(),
-                  borderData: FlBorderData(show: false),
-                  centerSpaceRadius: 40,
-                ),
+          // ── Pengeluaran per Kategori ──
+          if (hasExpense) ...[
+            Text('Pengeluaran per Kategori',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            _buildCategoryChart(_categoryBreakdown, colors),
+            const SizedBox(height: 24),
+          ],
+
+          // ── Pemasukan per Kategori ──
+          if (hasIncome) ...[
+            Text('Pemasukan per Kategori',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            _buildCategoryChart(_incomeCategoryBreakdown, [
+              Colors.green, Colors.teal, Colors.lightGreen, Colors.cyan,
+              Colors.lime, Colors.greenAccent, Colors.tealAccent, Colors.lightBlueAccent,
+            ]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryChart(Map<String, int> breakdown, List<Color> colors) {
+    final sorted = breakdown.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final total = sorted.fold<int>(0, (s, e) => s + e.value);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (sorted.isNotEmpty)
+          SizedBox(
+            height: 200,
+            child: PieChart(
+              PieChartData(
+                sections: sorted.take(8).toList().asMap().entries.map((e) {
+                  final pct = total > 0 ? (e.value.value / total * 100) : 0.0;
+                  return PieChartSectionData(
+                    value: e.value.value.toDouble(),
+                    color: colors[e.key % colors.length],
+                    title: '${pct.toStringAsFixed(0)}%',
+                    titleStyle: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    radius: 75,
+                  );
+                }).toList(),
+                borderData: FlBorderData(show: false),
+                centerSpaceRadius: 40,
               ),
             ),
-          const SizedBox(height: 16),
-          ...sorted.take(10).toList().asMap().entries.map((e) {
-            final pct = total > 0 ? (e.value.value / total * 100) : 0.0;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Container(
-                    width: 12, height: 12,
-                    decoration: BoxDecoration(color: colors[e.key % colors.length], shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(e.value.key, style: const TextStyle(fontSize: 13))),
+          ),
+        const SizedBox(height: 12),
+        ...sorted.take(10).toList().asMap().entries.map((e) {
+          final pct = total > 0 ? (e.value.value / total * 100) : 0.0;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 12, height: 12,
+                  decoration: BoxDecoration(
+                      color: colors[e.key % colors.length],
+                      shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text(e.value.key,
+                        style: const TextStyle(fontSize: 13))),
+                Text(_currencyFormat.format(e.value.value),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                const SizedBox(width: 8),
+                Text('${pct.toStringAsFixed(1)}%',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }yle(fontSize: 13))),
                   Text('${pct.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(width: 8),
                   Text(_currencyFormat.format(e.value.value),
