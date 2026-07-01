@@ -10,19 +10,14 @@
 
 ## Git Log (terbaru)
 ```
+59e7b55 fix: sync Firestore → SQLite saat reinstall/device baru
+876fd9d docs: update SESSION_SUMMARY sesi 1 Juli 2026
 8b488c1 feat: Material Icons, validasi saldo, fix tagihan & dashboard performa
 130a970 fix: hapus sisa kode lama di reports_screen kategori tab
 a580c6f fix: custom range laporan + tambah pemasukan per kategori
 5e7eefa fix: kategori hutang/piutang/tagihan ter-tracking di transaksi
 42a3055 fix: tambah updatedAt ke _toQueueData agar waktu bayar offline akurat saat sync
 8c428f3 ux: hapus biaya transfer hutang create, tambah kategori tagihan, indikator sudah bayar bulan ini
-3f5d2c9 fix: payment_methods_screen bracket mismatch, filter aktif/non-aktif
-6266673 ux: filter aktif/non-aktif metode pembayaran, edit transaksi tampil semua rekening
-6820262 ux: tagihan hapus field jatuh tempo, auto-set dari billingDay
-2bf78bc fix: _tabController not initialized in initState → LateInitializationError
-2062525 ux: filter chip Semua/Belum Lunas/Lunas per tab tagihan
-c27c937 feat: tambah riwayat transaksi per hutang/piutang/tagihan
-9ae667b feat: 3 tipe tagihan (hutang/piutang/tagihan), recurring cicilan, opsional rekening, fix sync offline
 ```
 
 ## Critical: freezed v3 Breaking Change
@@ -35,10 +30,64 @@ c27c937 feat: tambah riwayat transaksi per hutang/piutang/tagihan
 1. **Jangan `flutter clean`** — breaks `.dart_tool/flutter_build` di Windows
 2. Setelah edit `@freezed` model → `dart run build_runner build`
 3. Semua `@freezed` class harus `abstract class X with _$X`
-4. Shell `flutter analyze` kadang return git output → pakai `dart analyze <path>` atau git stash trick
+4. Shell `flutter analyze` kadang return git output → pakai `flutter analyze <path>` langsung
 5. `dart run` tidak bisa import `package:flutter` — gunakan `flutter test` untuk script yang butuh Flutter SDK
+6. **Build APK** selalu pakai `--no-tree-shake-icons` → `iconFromHex()` pakai non-const `IconData`
 
-## Sesi Terbaru (commit 8b488c1)
+## Sesi Terbaru (commit 59e7b55)
+
+### Bug Fix: Firestore → SQLite tidak sync saat reinstall / device baru
+
+**Root Causes yang ditemukan & diperbaiki:**
+
+#### 1. Filter `isDeleted`/`isActive` di Firestore query → skip doc lama
+Doc lama di Firestore tidak punya field `isDeleted` atau `isActive` → Firestore skip → 0 docs → SQLite kosong setelah reinstall.
+
+**Fix (semua service):** hapus filter Firestore, filter **client-side** setelah fetch semua docs:
+- `spending_limit_service.dart` — hapus `.where('isActive', isEqualTo: true)` & `.where('isDeleted', isEqualTo: false)`, filter client-side
+- `monthly_budget_service.dart` — hapus `.where('isDeleted', isEqualTo: false)`, filter client-side
+- `savings_plan_service.dart` — hapus `.where('isDeleted', isEqualTo: false)` & `.where('isActive', ...)`, filter client-side
+- `custody_service.dart` — filter isDeleted client-side di loop doc
+
+#### 2. `createdAt` di doc lama = String ISO, bukan Timestamp
+`_toFirestore()` lama pakai `.toIso8601String()` → cast `as Timestamp` → `TypeError` → exception silent di try/catch → semua doc skip → 0 results.
+
+**Fix:** tambah helper `_parseDateTime(dynamic)` di semua 4 service:
+```dart
+static DateTime _parseDateTime(dynamic value) {
+  if (value == null) return DateTime.now();
+  if (value is Timestamp) return value.toDate();
+  if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+  return DateTime.now();
+}
+```
+Service yang difix: `spending_limit_service`, `monthly_budget_service`, `savings_plan_service`, `custody_service`
+
+#### 3. `savings_allocations` tidak di-fetch Firestore saat reinstall
+`getAllocations()` sebelumnya hanya baca SQLite lokal → reinstall = allocations kosong → `savedAmount` recalculate = 0.
+
+**Fix:** `getAllocations(planId, userId)` Firestore-first + cache ke SQLite + merge offline unsynced. Signature berubah → update chain:
+- `savings_plan_service.dart` — tambah `_allocFromFirestore()`, fetch `savings_allocations` subcollection
+- `savings_plan_repository.dart` — `getAllocations(planId, userId)`
+- `savings_plan_view_model.dart` — pass `userId` ke `getAllocations`
+- `savings_history_screen.dart` — pass `widget.userId`
+
+#### 4. `bill_service` — `getBills` tidak filter `isDeleted`
+Doc soft-deleted ikut di-cache → ghost records. Fix: filter client-side + tambah `isDeleted` ke `_toFirestore` + handle nullable di `_fromFirestore`.
+
+### Files diubah (commit 59e7b55)
+```
+lib/data/services/bill_service.dart               ← isDeleted client-filter, _toFirestore, _fromFirestore fix
+lib/data/services/custody_service.dart            ← isDeleted client-filter, _parseDateTime, parse isDeleted
+lib/data/services/monthly_budget_service.dart     ← isDeleted client-filter, _parseDateTime, _fromFirestore fix
+lib/data/services/savings_plan_service.dart       ← isDeleted+isActive client-filter, _parseDateTime, getAllocations Firestore-first
+lib/data/services/spending_limit_service.dart     ← isActive+isDeleted client-filter, _parseDateTime
+lib/data/repositories/savings_plan_repository.dart ← getAllocations(planId, userId)
+lib/ui/features/savings/view_models/savings_plan_view_model.dart ← pass userId
+lib/ui/features/savings/views/savings_history_screen.dart        ← pass widget.userId, fix unnecessary __
+```
+
+## Sesi Sebelumnya (commit 8b488c1)
 
 ### Material Icons Migration
 - **`lib/ui/core/icon_helper.dart`** ← NEW
@@ -47,110 +96,68 @@ c27c937 feat: tambah riwayat transaksi per hutang/piutang/tagihan
   - `kSavingsMaterialIcons` — 20 hex codepoint untuk tabungan
   - `kIconLabels` — label deskriptif untuk accessibility
 - Semua emoji icon diganti ke hex codepoint Material Icons
-- `PaymentMethodType.iconData` getter (Icons.payments_outlined, account_balance_outlined, dll)
-- Migrasi data lama: `CategoryService.migrateIconsIfNeeded(userId)` jalan sekali via SharedPreferences flag `icon_migrated_v2_{userId}`
-- File diupdate: `category_model.dart`, `category_form_screen.dart`, `category_list_screen.dart`, `savings_plan_screen.dart`, `savings_history_screen.dart`, `dashboard_screen.dart`, `add_edit_bill_screen.dart`, `bills_screen.dart`, `monthly_budget_screen.dart`, `add_edit_transaction_screen.dart`, `spending_limit_form_screen.dart`, `payment_methods_screen.dart`, `add_edit_payment_method_screen.dart`
+- `PaymentMethodType.iconData` getter
+- Migrasi data lama: `CategoryService.migrateIconsIfNeeded(userId)` via SharedPreferences flag
 
 ### Preset Kategori Baru
-- `preset_gaji` → "Gaji & Pendapatan" 💼 (account_balance_wallet, biru)
-- `preset_hutang` → "Bayar Hutang" 💸 (payments, merah)
-- `preset_piutang` → "Terima Piutang" 💰 (savings, hijau)
-- Fallback `payBill`: hutang→`preset_hutang`, tagihan→`preset_tagihan`, piutang→`preset_piutang`
-- Biaya transfer → `preset_lainnya` (bukan `uncategorized`)
+- `preset_gaji` → "Gaji & Pendapatan" (account_balance_wallet, biru)
+- `preset_hutang` → "Bayar Hutang" (payments, merah)
+- `preset_piutang` → "Terima Piutang" (savings, hijau)
 
 ### Validasi Saldo Rekening
-Coverage lengkap di semua titik uang keluar:
-| Titik | File | Status |
-|---|---|---|
-| Transaksi expense | add_edit_transaction_screen | sudah ada sebelumnya |
-| Transfer antar rekening | transfer_screen | sudah ada sebelumnya |
-| Bayar hutang/tagihan | bills_screen._handlePay | ✅ baru |
-| Buat piutang + rekening | add_edit_bill_screen._handleSave | ✅ baru |
-| Custody KELUAR | custody_detail_screen | ✅ baru |
+Coverage lengkap di semua titik uang keluar: transaksi expense, transfer, bayar hutang/tagihan, buat piutang, custody KELUAR.
 
 ### Fix Tagihan
-- `createBill`: tagihan kirim `categoryId`/`categoryName` (sebelumnya hanya hutang)
-- `_fromFirestore`: parse `updatedAt` → indikator "sudah bayar bulan ini" muncul saat online
-- `_toFirestore`: include `updatedAt` → tersimpan ke Firestore
-- `_cacheBillsToSqlite`: skip overwrite jika `paidAmount`/`installmentsPaid` lokal lebih tinggi → progress tidak reset saat update APK
+- `_cacheBillsToSqlite`: skip overwrite jika `paidAmount`/`installmentsPaid` lokal lebih tinggi
 - Tombol bayar: disabled + label "Bayar Bulan Depan" saat sudah bayar bulan ini
-
-### Form Tagihan Cicilan (Redesign)
-- Hapus field "Nominal per Cicilan" (redundan)
-- `_nominalController` = nominal per bulan
-- `_hasMaxInstallments = true` → `nominal = perBulan × maxCicilan`, `installmentAmount = perBulan`
-- Preview kalkulasi realtime: `Rp X × N bulan = Rp Total`
-
-### Fix Anggaran Bulanan Icon
-- Dashboard L643: `Text(b.categoryIcon)` → `Icon(iconFromHex(b.categoryIcon))`
-- Budget dialog hapus: hapus hex prefix, pakai `categoryName` saja
 
 ### Performa Dashboard (Anti-Loop)
 - `AuthViewModel._clearError`: skip `notifyListeners` jika `_errorMessage == null`
-  → kurangi trigger rebuild berulang
-- Dashboard `_loadedUserId` guard: `_onAuthStateChanged` hanya panggil `_loadDashboardData` saat userId berubah (bukan tiap `notifyListeners`)
-  → eliminasi multiple load saat sign-in/token refresh
-- Batch loading flags: 4 `setState(_isLoading=true)` → 1 `setState` di `_loadDashboardData`
-  → kurangi 4 rebuild jadi 1
+- Dashboard `_loadedUserId` guard: hanya load saat userId berubah
 
 ## Arsitektur Icon Storage
 ```
 Model field 'icon': String  ← hex codepoint e.g. 'e532'
 Render:  Icon(iconFromHex(icon), ...)
-Storage: SQLite TEXT, Firestore String  ← tidak perlu schema migration
-Notifikasi (categoryIcon monthly_budget/spending_limit): TETAP emoji String ← tidak diubah
+Storage: SQLite TEXT, Firestore String
+Notifikasi (categoryIcon monthly_budget/spending_limit): TETAP emoji String ← by design
 Migrasi: CategoryService.migrateIconsIfNeeded() ← jalan sekali per user via SharedPrefs
 ```
 
-## Sesi Sebelumnya
+## Pola Firestore Query — WAJIB DIIKUTI
+> **JANGAN** filter `isDeleted`/`isActive` di Firestore query jika field tsb mungkin tidak ada di doc lama.
+> **SELALU** fetch semua doc, filter client-side setelah parse.
 
-### Tabungan (Savings)
-- UX: validasi rekening sumber ≠ rekening tujuan di form alokasi
-- Getter `_fromOptions` + `_toOptions` di `SavingsAllocationFormScreen`
+```dart
+// ✅ BENAR
+final snap = await _col(userId).get();
+final items = snap.docs
+    .map((d) => _fromFirestore(d.id, d.data()))
+    .where((item) => !item.isDeleted && item.isActive)
+    .toList();
 
-### Tagihan & Pinjaman (Bills) — Major Refactor
-**3 Tipe:**
-- `hutang` — kita berutang, opsional rekening masuk saat create (income), expense saat bayar
-- `piutang` — kita memberi pinjaman, opsional rekening keluar saat create (expense), income saat terima
-- `tagihan` — tagihan rutin bulanan, recurring dengan/tanpa batas cicilan
-
-**Model `BillModel` fields:**
-- `transferFee`, `paymentMethodId`, `paymentMethodName`
-- `billingDay`, `maxInstallments`, `installmentAmount`, `installmentsPaid`
-- `updatedAt` — dipakai untuk deteksi bayar bulan ini
-
-**Sync offline→online:**
-- `_cacheBillsToSqlite` skip overwrite jika `isSynced=0` atau progress lokal lebih tinggi
-- `updatedAt` di `_toQueueData` → waktu bayar offline akurat saat sync
-
-### Metode Pembayaran
-- FilterChip Semua/Aktif/Non-aktif di `PaymentMethodsScreen`
-- Edit transaksi: tampilkan semua rekening (aktif + non-aktif)
-
-### Laporan
-- Bug fix: custom range support `startDate/endDate`
-- Tambah: Pemasukan per Kategori (pie chart + list)
-
-## File Utama
+// ❌ SALAH — skip doc lama yang tidak punya field
+final snap = await _col(userId)
+    .where('isDeleted', isEqualTo: false)
+    .where('isActive', isEqualTo: true)
+    .get();
 ```
-lib/ui/core/icon_helper.dart                               ← NEW: Material Icons utility
-lib/domain/models/category_model.dart                     ← preset hex codepoint + 3 preset baru
-lib/domain/models/payment_method_model.dart               ← IconData getter
-lib/data/services/category_service.dart                   ← migrateIconsIfNeeded()
-lib/data/services/bill_service.dart                       ← updatedAt parse/save, cache fix
-lib/data/repositories/bill_repository.dart                ← preset categories, saldo check
-lib/ui/features/bills/views/bills_screen.dart             ← saldo check, tombol bayar bulan depan
-lib/ui/features/bills/views/add_edit_bill_screen.dart     ← form cicilan redesign, saldo piutang
-lib/ui/features/custody/views/custody_detail_screen.dart  ← saldo check KELUAR
-lib/ui/features/dashboard/views/dashboard_screen.dart     ← anti-loop guard, icon fix
-lib/ui/features/auth/view_models/auth_view_model.dart     ← _clearError guard
-lib/ui/features/budget/views/monthly_budget_screen.dart   ← icon fix
+
+## Pola `_parseDateTime` — WAJIB di semua `_fromFirestore`
+```dart
+static DateTime _parseDateTime(dynamic value) {
+  if (value == null) return DateTime.now();
+  if (value is Timestamp) return value.toDate();   // Firestore baru
+  if (value is String) return DateTime.tryParse(value) ?? DateTime.now(); // doc lama
+  return DateTime.now();
+}
 ```
 
 ## Known Issues / Belum Selesai
 - Warning: `json_annotation ^4.9.0` allows pre-4.12.0 → pertimbangkan upgrade
-- Warning: KGP (Kotlin Gradle Plugin) di `firebase_analytics` → future breaking change
+- Warning: KGP (Kotlin Gradle Plugin) di `firebase_analytics` → future breaking change (tidak bisa fix dari kode kita)
 - `sdk: ^3.5.0` di pubspec — pertimbangkan bump ke `^3.8.0`
-- Shell `flutter analyze` di environment ini return git output → workaround: `dart analyze <path>`
+- Shell `flutter analyze` di environment ini kadang return git output → workaround: jalankan dengan path spesifik
 - `PRD_Financial_App_Flutter_Firebase.md` dan `SETUP.md` terhapus (unstaged, tidak di-commit)
 - `categoryIcon` di `monthly_budget_model` & `spending_limit_model` masih emoji string (by design untuk notifikasi push)
+- Build APK wajib `--no-tree-shake-icons` karena `iconFromHex()` non-const IconData
