@@ -240,6 +240,20 @@ class TransactionDao {
 
     return updatedExpense + updatedIncome;
   }
+
+  /// Update paymentMethodId di semua transaksi yang pakai oldId → newId
+  /// Dipanggil saat PM offline sync → Firestore ID berubah dari UUID lokal
+  Future<int> updatePaymentMethodId(String oldId, String newId) async {
+    final db = await _dbHelper.database;
+    return await db.rawUpdate('''
+      UPDATE transactions
+      SET paymentMethodId = ?,
+          isSynced = 0,
+          updatedAt = ?
+      WHERE paymentMethodId = ? AND isDeleted = 0
+    ''', [newId, DateTime.now().millisecondsSinceEpoch, oldId]);
+  }
+
   Future<List<TransactionModel>> filterTransactions(
     String userId, {
     String? category,

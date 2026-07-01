@@ -353,6 +353,10 @@ class SyncEngine extends ChangeNotifier {
             ));
             // FIX: hardDelete UUID lokal agar tidak duplicate
             await _paymentMethodDao.hardDelete(localId);
+            // FIX: update semua transaksi yg pakai UUID lama → Firestore ID baru
+            // Ini perbaiki saldo = 0 saat PM dibuat offline lalu transaksi dibuat online
+            final updatedTx = await _transactionDao.updatePaymentMethodId(localId, newDocRef.id);
+            debugPrint('SyncEngine._syncPaymentMethod: updated $updatedTx transactions paymentMethodId $localId → ${newDocRef.id}');
           } catch (e) {
             debugPrint('SyncEngine._syncPaymentMethod update SQLite: $e');
           }
