@@ -96,9 +96,24 @@ class CustodyRepository {
 
     // Auto-create transaction
     // MASUK = income (uang masuk), KELUAR = expense (uang keluar)
+    // Auto-set preset categoryId berdasarkan movement type:
+    // - MASUK titipan diterima = piutang masuk (preset_piutang)
+    // - MASUK titipan diberikan = hutang dikembalikan (preset_piutang)
+    // - KELUAR titipan diterima = bayar balik ke pemberi titip (preset_hutang)
+    // - KELUAR titipan diberikan = bayar hutang kita (preset_hutang)
     final category = movementType == MovementType.masuk
         ? TransactionCategory.income
         : TransactionCategory.expense;
+
+    final String autoCategoryId;
+    final String autoCategoryName;
+    if (movementType == MovementType.masuk) {
+      autoCategoryId = 'preset_piutang';
+      autoCategoryName = 'Terima Piutang';
+    } else {
+      autoCategoryId = 'preset_hutang';
+      autoCategoryName = 'Bayar Hutang';
+    }
 
     final transaction = TransactionModel(
       id: 0,
@@ -110,6 +125,8 @@ class CustodyRepository {
       nominal: nominal,
       date: date,
       notes: description ?? 'Titipan: ${custody.depositorName}',
+      categoryId: autoCategoryId,
+      categoryName: autoCategoryName,
       localCreatedAt: DateTime.now(),
     );
     await _transactionService.createTransaction(transaction, isOnline);

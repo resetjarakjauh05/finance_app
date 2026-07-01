@@ -359,16 +359,34 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
                 final displayMethods = isEditMode
                     ? _viewModel.paymentMethods
                     : activeMethods;
-                final validId = displayMethods.isEmpty
-                    ? _selectedPaymentMethodId
-                    : displayMethods.any((m) => m.id == _selectedPaymentMethodId)
-                        ? _selectedPaymentMethodId
+                // FIX BUG: paymentMethodId di transaksi lama bisa = UUID lokal
+                // setelah PM sync → ID berubah ke Firestore ID → tidak match → null.
+                // Fallback: cari by name jika ID tidak ditemukan di list.
+                String? resolvedId = _selectedPaymentMethodId;
+                if (displayMethods.isNotEmpty && resolvedId != null) {
+                  final idMatch = displayMethods.any((m) => m.id == resolvedId);
+                  if (!idMatch) {
+                    // Coba match by paymentMethodName dari transaksi
+                    final nameToMatch = isEditMode
+                        ? widget.transaction!.paymentMethodName
                         : null;
-                if (displayMethods.isNotEmpty && validId != _selectedPaymentMethodId) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) setState(() => _selectedPaymentMethodId = validId);
-                  });
+                    if (nameToMatch != null) {
+                      final byName = displayMethods
+                          .where((m) => m.name == nameToMatch)
+                          .firstOrNull;
+                      resolvedId = byName?.id;
+                    } else {
+                      resolvedId = null;
+                    }
+                    // Update state agar konsisten
+                    if (resolvedId != _selectedPaymentMethodId) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) setState(() => _selectedPaymentMethodId = resolvedId);
+                      });
+                    }
+                  }
                 }
+                final validId = displayMethods.isEmpty ? _selectedPaymentMethodId : resolvedId;
                 return DropdownButtonFormField<String>(
                   initialValue: validId,
                   decoration: const InputDecoration(

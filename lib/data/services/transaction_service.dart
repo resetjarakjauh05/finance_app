@@ -407,7 +407,16 @@ class TransactionService {
   }
 
   /// Get saldo per payment method
+  /// Selalu gunakan SQLite sebagai source of truth.
+  /// Firestore hanya jadi cadangan jika SQLite kosong (misal fresh install sebelum initialSync selesai).
+  /// Ini menghindari ID mismatch: paymentMethodId di transaksi lama = UUID lokal,
+  /// sedangkan PM di Firestore sudah pakai Firestore ID setelah sync.
   Future<Map<String, int>> getBalancePerPaymentMethod(String userId) async {
+    // SQLite selalu sumber utama — sudah termasuk data offline & synced
+    final localBalances = await _transactionDao.getBalancePerPaymentMethod(userId);
+    if (localBalances.isNotEmpty) return localBalances;
+
+    // Fallback ke Firestore hanya jika SQLite benar-benar kosong (fresh install)
     final isOnline = await _connectivity.isOnline();
     if (isOnline) {
       try {
@@ -419,7 +428,6 @@ class TransactionService {
         final Map<String, int> balances = {};
         for (final doc in snap.docs) {
           final data = doc.data();
-          // Skip deleted
           if (data['isDeleted'] == true) continue;
           final id = data['paymentMethodId'] as String? ?? '';
           if (id.isEmpty) continue;
@@ -428,26 +436,12 @@ class TransactionService {
           balances[id] = (balances[id] ?? 0) +
               (cat == 'income' ? nominal : -nominal);
         }
-
-        // FIX BUG 4: merge transaksi offline yg belum sync ke Firestore
-        // Tanpa ini, saldo hilang saat online karena Firestore belum punya data offline
-        final unsynced = await _transactionDao.getUnsyncedByUserId(userId);
-        for (final row in unsynced) {
-          if ((row['isDeleted'] as int? ?? 0) == 1) continue;
-          final id = row['paymentMethodId'] as String? ?? '';
-          if (id.isEmpty) continue;
-          final nominal = (row['nominal'] as num?)?.toInt() ?? 0;
-          final cat = row['category'] as String? ?? '';
-          balances[id] = (balances[id] ?? 0) +
-              (cat == 'income' ? nominal : -nominal);
-        }
-
         return balances;
       } catch (e) {
-        debugPrint('getBalancePerPaymentMethod Firestore error, fallback: $e');
+        debugPrint('getBalancePerPaymentMethod Firestore fallback error: $e');
       }
     }
-    return await _transactionDao.getBalancePerPaymentMethod(userId);
+    return {};
   }
 
   /// Get total by category — Firestore-first, fallback SQLite
