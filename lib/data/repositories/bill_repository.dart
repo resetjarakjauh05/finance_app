@@ -101,8 +101,8 @@ class BillRepository {
         notes: transferFee > 0
             ? 'Pinjaman masuk: ${name.trim()} (termasuk biaya transfer)'
             : 'Pinjaman masuk: ${name.trim()}',
-        categoryId: null,
-        categoryName: 'Hutang',
+        categoryId: categoryId ?? 'sys_hutang',
+        categoryName: categoryName ?? 'Hutang',
         localCreatedAt: DateTime.now(),
       );
       await _transactionService.createTransaction(tx, isOnline);
@@ -123,7 +123,7 @@ class BillRepository {
         notes: transferFee > 0
             ? 'Memberi pinjaman: ${name.trim()} (termasuk biaya transfer)'
             : 'Memberi pinjaman: ${name.trim()}',
-        categoryId: null,
+        categoryId: 'sys_piutang',
         categoryName: 'Piutang',
         localCreatedAt: DateTime.now(),
       );
@@ -180,19 +180,19 @@ class BillRepository {
     await _service.updateBill(updated, isOnline);
 
     // Kategori transaksi per tipe:
-    // Hutang  → expense (kita bayar ke orang)
-    // Piutang → income  (kita terima dari orang)
-    // Tagihan → expense (kita bayar tagihan)
+    // Hutang  → expense (kita bayar ke orang) → pakai kategori bill atau fallback 'hutang'
+    // Piutang → income  (kita terima dari orang) → kategori khusus 'piutang'
+    // Tagihan → expense (kita bayar tagihan) → pakai kategori bill
     final txCategory = bill.type == BillType.piutang
         ? TransactionCategory.income
         : TransactionCategory.expense;
 
-    final txCategoryId = txCategory == TransactionCategory.expense
-        ? (bill.categoryId ?? 'uncategorized')
-        : null;
-    final txCategoryName = txCategory == TransactionCategory.expense
-        ? (bill.categoryName ?? 'Lainnya')
-        : null;
+    final txCategoryId = bill.type == BillType.piutang
+        ? 'sys_piutang'
+        : (bill.categoryId ?? 'sys_hutang');
+    final txCategoryName = bill.type == BillType.piutang
+        ? 'Piutang'
+        : (bill.categoryName ?? 'Hutang');
 
     final String txDesc;
     if (bill.type == BillType.hutang) {
