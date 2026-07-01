@@ -164,7 +164,7 @@ class _AddEditPaymentMethodScreenState
                   value: type,
                   child: Row(
                     children: [
-                      Text(type.icon, style: const TextStyle(fontSize: 20)),
+                      Icon(type.iconData, size: 20),
                       const SizedBox(width: 8),
                       Text(type.displayName),
                     ],

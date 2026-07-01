@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/services/custody_service.dart';
 import '../../../../data/services/payment_method_service.dart';
+import '../../../../data/services/transaction_service.dart';
 import '../../../../data/repositories/custody_repository.dart';
 import '../../../../data/repositories/payment_method_repository.dart';
+import '../../../../data/repositories/transaction_repository.dart';
 import '../../../../domain/models/custody_model.dart';
 import '../../../../domain/models/custody_movement_model.dart';
 import '../../../../domain/models/payment_method_model.dart';
@@ -191,6 +193,32 @@ class _CustodyDetailScreenState extends State<CustodyDetailScreen> {
         });
         return;
       }
+
+      // Cek saldo rekening saat KELUAR
+      if (selectedType == MovementType.keluar) {
+        final totalKeluar = amount + fee;
+        final txRepo = TransactionRepository(service: TransactionService());
+        final saldo = await txRepo.getBalanceForPaymentMethod(
+            widget.userId, selectedMethod!.id);
+        if (saldo < totalKeluar && mounted) {
+          final fmt = NumberFormat.currency(
+              locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+          await showErrorDialog(
+            context,
+            title: 'Saldo Tidak Mencukupi',
+            message:
+                'Saldo ${selectedMethod!.name} hanya ${fmt.format(saldo)}. '
+                'Dibutuhkan ${fmt.format(totalKeluar)} untuk pergerakan keluar ini.',
+          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            nominalController.dispose();
+            transferFeeController.dispose();
+            descController.dispose();
+          });
+          return;
+        }
+      }
+
       try {
         await _viewModel.addMovement(
           custody: _custody,

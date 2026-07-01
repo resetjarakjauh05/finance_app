@@ -314,9 +314,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
                                   backgroundColor: Theme.of(context)
                                       .colorScheme
                                       .primaryContainer,
-                                  child: Text(method.type.icon,
-                                      style:
-                                          const TextStyle(fontSize: 20)),
+                                  child: Icon(method.type.iconData, size: 20),
                                 ),
                                 title: Text(
                                   method.name,

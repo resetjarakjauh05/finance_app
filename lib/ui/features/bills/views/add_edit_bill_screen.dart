@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/currency_input_formatter.dart';
+import '../../../core/icon_helper.dart';
 import '../../../../data/services/bill_service.dart';
+import '../../../../data/services/transaction_service.dart';
 import '../../../../data/repositories/bill_repository.dart';
 import '../../../../data/repositories/category_repository.dart';
 import '../../../../data/repositories/payment_method_repository.dart';
+import '../../../../data/repositories/transaction_repository.dart';
 import '../../../../data/services/category_service.dart';
 import '../../../../data/services/payment_method_service.dart';
 import '../../../../data/local/category_dao.dart';
@@ -30,7 +33,6 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
   final _nominalController = TextEditingController();
   final _notesController = TextEditingController();
   final _transferFeeController = TextEditingController(text: '0');
-  final _installmentAmountController = TextEditingController();
   final _maxInstallmentsController = TextEditingController();
   late final BillViewModel _viewModel;
 
@@ -80,10 +82,7 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
       if (b.maxInstallments != null) {
         _maxInstallmentsController.text = b.maxInstallments.toString();
       }
-      if (b.installmentAmount != null) {
-        _installmentAmountController.text =
-            ThousandsSeparatorInputFormatter.formatWithDots(b.installmentAmount.toString());
-      }
+      // installmentAmount dihitung otomatis dari nominal × maxInstallments
     }
     _loadCategories();
     _loadPaymentMethods();
@@ -133,7 +132,6 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
     _nominalController.dispose();
     _notesController.dispose();
     _transferFeeController.dispose();
-    _installmentAmountController.dispose();
     _maxInstallmentsController.dispose();
     super.dispose();
   }
@@ -161,8 +159,39 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
       return;
     }
 
+    // Validasi kategori wajib untuk tagihan
+    if (isTagihan && _selectedCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Pilih kategori untuk tagihan'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+
     final transferFee =
         ThousandsSeparatorInputFormatter.parseValue(_transferFeeController.text);
+
+    // Cek saldo saat buat piutang baru (uang keluar opsional)
+    if (!isEditMode && isPiutang && _selectedPaymentMethod != null) {
+      final nominal = ThousandsSeparatorInputFormatter.parseValue(_nominalController.text);
+      final totalKeluar = nominal + transferFee;
+      final txRepo = TransactionRepository(service: TransactionService());
+      final saldo = await txRepo.getBalanceForPaymentMethod(
+          widget.userId, _selectedPaymentMethod!.id);
+      if (saldo < totalKeluar) {
+        if (!mounted) return;
+        final fmt = NumberFormat.currency(
+            locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+        await showErrorDialog(
+          context,
+          title: 'Saldo Tidak Mencukupi',
+          message:
+              'Saldo ${_selectedPaymentMethod!.name} hanya ${fmt.format(saldo)}. '
+              'Dibutuhkan ${fmt.format(totalKeluar)} untuk mencatat piutang ini.',
+        );
+        return;
+      }
+    }
 
     // Tagihan: auto-set dueDate dari billingDay (bulan ini atau depan jika sudah lewat)
     if (isTagihan) {
@@ -179,18 +208,23 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
             _maxInstallmentsController.text.isNotEmpty
         ? int.tryParse(_maxInstallmentsController.text)
         : null;
-    final int? installmentAmount =
-        _installmentAmountController.text.isNotEmpty &&
-                _installmentAmountController.text != '0'
-            ? ThousandsSeparatorInputFormatter.parseValue(
-                _installmentAmountController.text)
-            : null;
+
+    // Saat ada batas cicilan:
+    // nominal = perBulan × maxCicilan
+    // installmentAmount = perBulan (dari _nominalController)
+    final int perBulan = ThousandsSeparatorInputFormatter.parseValue(_nominalController.text);
+    final int resolvedNominal = (_hasMaxInstallments && maxInstallments != null && maxInstallments > 0)
+        ? perBulan * maxInstallments
+        : perBulan;
+    final int? resolvedInstallmentAmount = (_hasMaxInstallments && maxInstallments != null)
+        ? perBulan
+        : null;
 
     try {
       if (isEditMode) {
         final updated = widget.bill!.copyWith(
           name: _nameController.text.trim(),
-          nominal: ThousandsSeparatorInputFormatter.parseValue(_nominalController.text),
+          nominal: isTagihan ? resolvedNominal : ThousandsSeparatorInputFormatter.parseValue(_nominalController.text),
           dueDate: _dueDate,
           type: _selectedType,
           categoryId: isHutang ? _selectedCategory?.id : isTagihan ? _selectedCategory?.id : null,
@@ -202,7 +236,7 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
           transferFee: (isHutang || isPiutang) ? transferFee : 0,
           billingDay: isTagihan ? _billingDay : null,
           maxInstallments: isTagihan ? maxInstallments : null,
-          installmentAmount: isTagihan ? installmentAmount : null,
+          installmentAmount: isTagihan ? resolvedInstallmentAmount : null,
           notes: _notesController.text.trim().isNotEmpty
               ? _notesController.text.trim()
               : null,
@@ -212,17 +246,17 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
       } else {
         await _viewModel.createBill(
           name: _nameController.text.trim(),
-          nominal: ThousandsSeparatorInputFormatter.parseValue(_nominalController.text),
+          nominal: isTagihan ? resolvedNominal : ThousandsSeparatorInputFormatter.parseValue(_nominalController.text),
           dueDate: _dueDate,
           type: _selectedType,
-          categoryId: isHutang ? _selectedCategory?.id : null,
-          categoryName: isHutang ? _selectedCategory?.name : null,
+          categoryId: (isHutang || isTagihan) ? _selectedCategory?.id : null,
+          categoryName: (isHutang || isTagihan) ? _selectedCategory?.name : null,
           paymentMethod:
               (isHutang || isPiutang) ? _selectedPaymentMethod : null,
           transferFee: (isHutang || isPiutang) ? transferFee : 0,
           billingDay: isTagihan ? _billingDay : null,
           maxInstallments: isTagihan ? maxInstallments : null,
-          installmentAmount: isTagihan ? installmentAmount : null,
+          installmentAmount: isTagihan ? resolvedInstallmentAmount : null,
           notes: _notesController.text.trim().isNotEmpty
               ? _notesController.text.trim()
               : null,
@@ -361,14 +395,15 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
               inputFormatters: [ThousandsSeparatorInputFormatter()],
               decoration: InputDecoration(
                 labelText: isTagihan
-                    ? (isTagihan && _hasMaxInstallments
-                        ? 'Total Nominal Keseluruhan'
+                    ? (_hasMaxInstallments
+                        ? 'Nominal per Bulan *'
                         : 'Nominal per Bulan')
                     : (isPiutang ? 'Jumlah Pinjaman' : 'Total Nominal'),
                 prefixText: 'Rp ',
                 prefixIcon: const Icon(Icons.attach_money),
                 border: const OutlineInputBorder(),
               ),
+              onChanged: (_) => setState(() {}),
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Nominal tidak boleh kosong';
                 final val = ThousandsSeparatorInputFormatter.parseValue(v);
@@ -376,6 +411,56 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
                 return null;
               },
             ),
+
+            // Preview total kalkulasi saat ada batas cicilan
+            if (isTagihan && _hasMaxInstallments) ...[
+              const SizedBox(height: 8),
+              Builder(builder: (context) {
+                final perBulan = ThousandsSeparatorInputFormatter.parseValue(
+                    _nominalController.text);
+                final bulan = int.tryParse(_maxInstallmentsController.text) ?? 0;
+                final total = perBulan * bulan;
+                final fmt = NumberFormat.currency(
+                    locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calculate_outlined, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          bulan > 0 && perBulan > 0
+                              ? '${fmt.format(perBulan)} × $bulan bulan = ${fmt.format(total)}'
+                              : 'Isi nominal & jumlah cicilan untuk melihat total',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                color:
+                                    Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
             const SizedBox(height: 16),
 
             // Due date / Estimasi (hanya hutang & piutang)
@@ -469,7 +554,13 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
         items: _categories
             .map((cat) => DropdownMenuItem(
                   value: cat,
-                  child: Text('${cat.icon} ${cat.name}'),
+                  child: Row(
+                    children: [
+                      Icon(iconFromHex(cat.icon), size: 18, color: Color(cat.color)),
+                      const SizedBox(width: 8),
+                      Text(cat.name),
+                    ],
+                  ),
                 ))
             .toList(),
         onChanged: (v) => setState(() => _selectedCategory = v),
@@ -562,28 +653,33 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
   ];
 
   List<Widget> _buildTagihanFields() => [
-    // Kategori (opsional untuk tagihan)
+    // Kategori (wajib untuk tagihan)
     if (_loadingCategories)
       const Center(child: CircularProgressIndicator())
-    else if (_categories.isNotEmpty) ...[
+    else ...[
       DropdownButtonFormField<CategoryModel?>(
         initialValue: _selectedCategory,
         decoration: const InputDecoration(
-          labelText: 'Kategori (opsional)',
+          labelText: 'Kategori *',
           prefixIcon: Icon(Icons.category_outlined),
           border: OutlineInputBorder(),
+          helperText: 'Dipakai untuk tracking pengeluaran tagihan',
         ),
-        items: [
-          const DropdownMenuItem<CategoryModel?>(
-            value: null,
-            child: Text('— Tanpa kategori —'),
-          ),
-          ..._categories.map((cat) => DropdownMenuItem(
-                value: cat,
-                child: Text('${cat.icon} ${cat.name}'),
-              )),
-        ],
+        items: _categories
+            .map((cat) => DropdownMenuItem(
+                  value: cat,
+                  child: Row(
+                    children: [
+                      Icon(iconFromHex(cat.icon), size: 18, color: Color(cat.color)),
+                      const SizedBox(width: 8),
+                      Text(cat.name),
+                    ],
+                  ),
+                ))
+            .toList(),
         onChanged: (v) => setState(() => _selectedCategory = v),
+        validator: (v) =>
+            isTagihan && v == null ? 'Pilih kategori untuk tagihan' : null,
       ),
       const SizedBox(height: 16),
     ],
@@ -634,6 +730,7 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
       TextFormField(
         controller: _maxInstallmentsController,
         keyboardType: TextInputType.number,
+        onChanged: (_) => setState(() {}),
         decoration: const InputDecoration(
           labelText: 'Jumlah Cicilan (bulan) *',
           prefixIcon: Icon(Icons.format_list_numbered),
@@ -648,21 +745,6 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
           if (n == null || n <= 0) return 'Harus lebih dari 0';
           return null;
         },
-      ),
-      const SizedBox(height: 16),
-
-      // Nominal per cicilan (opsional — bisa dihitung otomatis)
-      TextFormField(
-        controller: _installmentAmountController,
-        keyboardType: TextInputType.number,
-        inputFormatters: [ThousandsSeparatorInputFormatter()],
-        decoration: const InputDecoration(
-          labelText: 'Nominal per Cicilan (opsional)',
-          prefixText: 'Rp ',
-          prefixIcon: Icon(Icons.payments_outlined),
-          border: OutlineInputBorder(),
-          helperText: 'Kosongkan = total nominal ÷ jumlah cicilan',
-        ),
       ),
     ],
     const SizedBox(height: 16),

@@ -125,6 +125,7 @@ class AuthViewModel extends ChangeNotifier {
   }
 
   void _clearError() {
+    if (_errorMessage == null) return;
     _errorMessage = null;
     notifyListeners();
   }

@@ -1,10 +1,57 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../domain/models/category_model.dart';
 import '../local/category_dao.dart';
 import '../local/pending_operations_dao.dart';
 import 'connectivity_service.dart';
+
+/// Mapping emoji lama → hex codepoint Material Icons
+const Map<String, String> _kEmojiToHex = {
+  '🍽️': 'e532', '🍽': 'e532',
+  '🚗': 'e1d7',
+  '🛍️': 'e59a', '🛍': 'e59a',
+  '🎮': 'e5e8',
+  '💊': 'e3d8',
+  '📚': 'e559',
+  '🧾': 'e50d',
+  '☕': 'e38d',
+  '💼': 'e041',
+  '📈': 'e67f',
+  '💸': 'e482',
+  '💰': 'e553',
+  '📦': 'e402',
+  '🏠': 'e318',
+  '✈️': 'e297', '✈': 'e297',
+  '💪': 'e28d',
+  '🎵': 'e415',
+  '🐾': 'e4a1',
+  '👕': 'e15d',
+  '💄': 'e5d8',
+  '🎁': 'e13e',
+  '⚽': 'e5f2',
+  '🔧': 'e116',
+  '💻': 'e367',
+  '📱': 'e5c6',
+  '🎬': 'e40d',
+  '🍕': 'e25a',
+  '🚌': 'e1d5',
+  '🏥': 'e396',
+  '🌿': 'e217',
+  '🎓': 'e80c',
+  '❤️': 'e25b', '❤': 'e25b',
+  // savings icons
+  '🐷': 'e553',
+  '🏖️': 'e0d6', '🏖': 'e0d6',
+  '🏋️': 'e28d', '🏋': 'e28d',
+  '👶': 'e160',
+  '🛒': 'e59c',
+  '⚡': 'e0ee',
+  '🌍': 'e366',
+  '📷': 'e130',
+  '💍': 'f04ed',
+};
 
 class CategoryService {
   final FirebaseFirestore _firestore;
@@ -43,9 +90,75 @@ class CategoryService {
     _syncPresetsToFirestore(userId, presets);
   }
 
+  /// Migrasi icon emoji lama → hex codepoint Material Icons (jalan sekali per user)
+  Future<void> migrateIconsIfNeeded(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'icon_migrated_v2_$userId';
+    if (prefs.getBool(key) == true) return;
+
+    try {
+      final all = await _dao.getCategories(userId);
+      final toMigrate = all.where((c) => _isEmojiIcon(c.icon)).toList();
+
+      if (toMigrate.isNotEmpty) {
+        for (final cat in toMigrate) {
+          final newHex = _emojiToHex(cat.icon);
+          final updated = cat.copyWith(
+            icon: newHex,
+            updatedAt: DateTime.now(),
+            isSynced: false,
+          );
+          await _dao.update(updated);
+          debugPrint('CategoryService: migrated "${cat.name}" icon ${cat.icon} → $newHex');
+        }
+        // Sync ke Firestore async
+        _syncIconMigration(userId, toMigrate.map((c) => c.copyWith(
+          icon: _emojiToHex(c.icon),
+          updatedAt: DateTime.now(),
+        )).toList());
+      }
+
+      await prefs.setBool(key, true);
+      debugPrint('CategoryService: icon migration done for $userId (${toMigrate.length} updated)');
+    } catch (e) {
+      debugPrint('CategoryService.migrateIconsIfNeeded error: $e');
+    }
+  }
+
+  /// Cek apakah string adalah emoji (bukan hex codepoint 4-5 char)
+  bool _isEmojiIcon(String icon) {
+    // Hex codepoint: 4-5 char alfanumerik, mis: 'e532', 'f04ed'
+    return !RegExp(r'^[0-9a-f]{4,5}$').hasMatch(icon);
+  }
+
+  /// Map emoji → hex, fallback 'e402' (more_horiz)
+  String _emojiToHex(String emoji) => _kEmojiToHex[emoji] ?? 'e402';
+
+  void _syncIconMigration(String userId, List<CategoryModel> categories) async {
+    try {
+      final isOnline = await _connectivity.isOnline();
+      if (!isOnline) return;
+      final batch = _firestore.batch();
+      for (final cat in categories) {
+        final docRef = cat.firebaseDocId != null
+            ? _col(userId).doc(cat.firebaseDocId)
+            : _col(userId).doc(cat.id);
+        batch.update(docRef, {
+          'icon': cat.icon,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      debugPrint('CategoryService: icon migration synced to Firestore');
+    } catch (e) {
+      debugPrint('CategoryService._syncIconMigration error: $e');
+    }
+  }
+
   /// Get kategori — Firestore-first, fallback SQLite
   Future<List<CategoryModel>> getCategories(String userId) async {
     await initializePresets(userId);
+    await migrateIconsIfNeeded(userId);
 
     final isOnline = await _connectivity.isOnline();
     if (isOnline) {

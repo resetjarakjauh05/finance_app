@@ -9,6 +9,7 @@ import '../../../../data/services/payment_method_service.dart';
 import '../../../../data/local/savings_plan_dao.dart';
 import '../view_models/savings_plan_view_model.dart';
 import '../../../core/currency_input_formatter.dart';
+import '../../../core/icon_helper.dart';
 import 'savings_history_screen.dart';
 
 class SavingsPlanScreen extends StatefulWidget {
@@ -328,8 +329,8 @@ class _PlanCard extends StatelessWidget {
                 // Header
                 Row(
                   children: [
-                    Text(plan.icon ?? '🐷',
-                        style: const TextStyle(fontSize: 24)),
+                    Icon(iconFromHex(plan.icon ?? kSavingsMaterialIcons.first),
+                        size: 24, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -482,7 +483,7 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
   final _descController = TextEditingController();
   final _targetController = TextEditingController();
   final _monthlyController = TextEditingController();
-  String _icon = '🐷';
+  String _icon = kSavingsMaterialIcons.first;
   DateTime? _targetDate;
   bool _isSaving = false;
 
@@ -493,11 +494,8 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
 
   bool get _isEdit => widget.existing != null;
 
-  // Daftar emoji pilihan untuk tabungan
-  static const _icons = [
-    '🐷', '🏠', '✈️', '🚗', '💍', '📱', '💻', '🎓', '💰', '🏖️',
-    '🏋️', '🎮', '👶', '🏥', '🛒', '⚡', '🌍', '🎵', '📷', '🎁',
-  ];
+  // Daftar Material Icons untuk tabungan
+  static const _icons = kSavingsMaterialIcons;
 
   @override
   void initState() {
@@ -510,7 +508,7 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
       _monthlyController.text = widget.existing!.monthlyTarget > 0
           ? ThousandsSeparatorInputFormatter.formatWithDots(widget.existing!.monthlyTarget.toString())
           : '';
-      _icon = widget.existing!.icon ?? '🐷';
+      _icon = widget.existing!.icon ?? kSavingsMaterialIcons.first;
       _targetDate = widget.existing!.targetDate;
     }
   }
@@ -704,10 +702,10 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: _icons.map((icon) {
-        final isSelected = icon == _icon;
+      children: _icons.map((hex) {
+        final isSelected = hex == _icon;
         return GestureDetector(
-          onTap: () => setState(() => _icon = icon),
+          onTap: () => setState(() => _icon = hex),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             width: 44,
@@ -723,7 +721,13 @@ class _SavingsPlanFormScreenState extends State<SavingsPlanFormScreen> {
                   : null,
             ),
             child: Center(
-              child: Text(icon, style: const TextStyle(fontSize: 20)),
+              child: Icon(
+                iconFromHex(hex),
+                size: 20,
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Colors.grey[600],
+              ),
             ),
           ),
         );
@@ -891,8 +895,8 @@ class _SavingsAllocationFormScreenState
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Text(widget.plan.icon ?? '🐷',
-                        style: const TextStyle(fontSize: 24)),
+                    Icon(iconFromHex(widget.plan.icon ?? kSavingsMaterialIcons.first),
+                        size: 24, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../domain/models/monthly_budget_model.dart';
+import '../../../core/icon_helper.dart';
 import '../../../../domain/models/category_model.dart';
 import '../../../../data/repositories/monthly_budget_repository.dart';
 import '../../../../data/services/monthly_budget_service.dart';
@@ -192,7 +193,7 @@ class _MonthlyBudgetScreenState extends State<MonthlyBudgetScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Hapus Anggaran'),
         content: Text(
-            'Hapus anggaran "${budget.categoryIcon} ${budget.categoryName}"?'),
+            'Hapus anggaran "${budget.categoryName}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -381,8 +382,8 @@ class _BudgetCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(item.budget.categoryIcon,
-                    style: const TextStyle(fontSize: 22)),
+                Icon(iconFromHex(item.budget.categoryIcon),
+                    size: 22, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(item.budget.categoryName,
@@ -601,7 +602,13 @@ class _MonthlyBudgetFormScreenState extends State<MonthlyBudgetFormScreen> {
       items: _categories
           .map((cat) => DropdownMenuItem(
                 value: cat,
-                child: Text('${cat.icon} ${cat.name}'),
+                child: Row(
+                  children: [
+                    Icon(iconFromHex(cat.icon), size: 18, color: Color(cat.color)),
+                    const SizedBox(width: 8),
+                    Text(cat.name),
+                  ],
+                ),
               ))
           .toList(),
       onChanged: (v) => setState(() => _selectedCategory = v),

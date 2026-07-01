@@ -159,6 +159,9 @@ class BillService {
       localCreatedAt: data['createdAt'] != null
           ? (data['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
+      updatedAt: data['updatedAt'] != null
+          ? (data['updatedAt'] as Timestamp).toDate()
+          : null,
     );
   }
 
@@ -182,7 +185,19 @@ class BillService {
             debugPrint('_cacheBillsToSqlite: skip overwrite localId=$localId (unsynced local)');
             continue;
           }
-          // Record sudah synced → aman di-overwrite dengan data Firestore terbaru
+          // Record sudah synced → overwrite dengan data Firestore
+          // KECUALI progress lokal lebih baru (bayar online baru saja)
+          final localPaidAmount = (existing['paidAmount'] as int?) ?? 0;
+          final localInstallmentsPaid = (existing['installmentsPaid'] as int?) ?? 0;
+          final firestorePaidAmount = b.paidAmount;
+          final firestoreInstallmentsPaid = b.installmentsPaid;
+
+          if (localPaidAmount > firestorePaidAmount ||
+              localInstallmentsPaid > firestoreInstallmentsPaid) {
+            // Data lokal lebih maju → skip overwrite, SyncEngine akan push ke Firestore
+            debugPrint('_cacheBillsToSqlite: skip overwrite localId=$localId (local progress ahead: paid=$localPaidAmount vs $firestorePaidAmount)');
+            continue;
+          }
           await _billDao.update(localId, b.copyWith(id: localId).toSqlite());
           await _billDao.markAsSynced(localId, b.firebaseDocId!);
         }
@@ -211,6 +226,9 @@ class BillService {
     'maxInstallments': b.maxInstallments,
     'installmentAmount': b.installmentAmount,
     'installmentsPaid': b.installmentsPaid,
+    'updatedAt': b.updatedAt != null
+        ? Timestamp.fromDate(b.updatedAt!)
+        : FieldValue.serverTimestamp(),
   };
 
   /// Khusus untuk create — include createdAt via serverTimestamp

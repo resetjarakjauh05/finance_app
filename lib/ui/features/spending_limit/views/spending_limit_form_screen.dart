@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/currency_input_formatter.dart';
+import '../../../core/icon_helper.dart';
 import '../../../../domain/models/spending_limit_model.dart';
 import '../../../../domain/models/category_model.dart';
 import '../../../../data/repositories/category_repository.dart';
@@ -213,7 +214,14 @@ class _SpendingLimitFormScreenState extends State<SpendingLimitFormScreen> {
           onSelected: (_) => setState(() => _selectedCategory = null),
         ),
         ..._categories.map((cat) => ChoiceChip(
-              label: Text('${cat.icon} ${cat.name}'),
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(iconFromHex(cat.icon), size: 16, color: Color(cat.color)),
+                  const SizedBox(width: 4),
+                  Text(cat.name),
+                ],
+              ),
               selected: _selectedCategory?.id == cat.id,
               onSelected: (_) => setState(() => _selectedCategory = cat),
             )),

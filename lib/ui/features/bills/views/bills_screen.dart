@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/services/bill_service.dart';
 import '../../../../data/services/payment_method_service.dart';
+import '../../../../data/services/transaction_service.dart';
 import '../../../../data/repositories/bill_repository.dart';
 import '../../../../data/repositories/payment_method_repository.dart';
+import '../../../../data/repositories/transaction_repository.dart';
 import '../../../../domain/models/bill_model.dart';
 import '../../../../domain/models/payment_method_model.dart';
 import '../../../core/dialogs.dart';
@@ -131,6 +133,25 @@ class _BillsScreenState extends State<BillsScreen>
     );
 
     if (result != null && result.amount > 0 && mounted) {
+      // Cek saldo hanya untuk tipe expense (hutang bayar & tagihan)
+      if (bill.type != BillType.piutang) {
+        final totalKeluar = result.amount + result.transferFee;
+        final txRepo = TransactionRepository(service: TransactionService());
+        final saldo = await txRepo.getBalanceForPaymentMethod(
+            widget.userId, result.method.id);
+        if (saldo < totalKeluar && mounted) {
+          final fmt = NumberFormat.currency(
+              locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+          await showErrorDialog(
+            context,
+            title: 'Saldo Tidak Mencukupi',
+            message:
+                'Saldo ${result.method.name} hanya ${fmt.format(saldo)}. '
+                'Dibutuhkan ${fmt.format(totalKeluar)} untuk pembayaran ini.',
+          );
+          return;
+        }
+      }
       try {
         await _viewModel.payBill(bill, result.amount, result.method,
             transferFee: result.transferFee);
@@ -555,12 +576,26 @@ class _BillsScreenState extends State<BillsScreen>
                   icon: const Icon(Icons.history, size: 16),
                   label: const Text('Riwayat'),
                 ),
-                if (showPay && bill.status != BillStatus.paid)
-                  TextButton.icon(
-                    onPressed: () => _handlePay(bill),
-                    icon: const Icon(Icons.payment, size: 16),
-                    label: Text(_payLabel(bill)),
-                  ),
+                if (showPay && bill.status != BillStatus.paid) ...[
+                  Builder(builder: (context) {
+                    final now = DateTime.now();
+                    final paidThisMonth = bill.type == BillType.tagihan &&
+                        bill.updatedAt != null &&
+                        bill.updatedAt!.year == now.year &&
+                        bill.updatedAt!.month == now.month &&
+                        bill.installmentsPaid > 0 &&
+                        bill.status != BillStatus.unpaid;
+                    return TextButton.icon(
+                      onPressed: paidThisMonth ? null : () => _handlePay(bill),
+                      icon: Icon(
+                        paidThisMonth ? Icons.schedule : Icons.payment,
+                        size: 16,
+                        color: paidThisMonth ? Colors.grey : null,
+                      ),
+                      label: Text(_payLabel(bill, paidThisMonth: paidThisMonth)),
+                    );
+                  }),
+                ],
                 TextButton.icon(
                   onPressed: () => _navigateToAddEdit(bill: bill),
                   icon: const Icon(Icons.edit, size: 16),
@@ -580,11 +615,13 @@ class _BillsScreenState extends State<BillsScreen>
     );
   }
 
-  String _payLabel(BillModel bill) {
+  String _payLabel(BillModel bill, {bool paidThisMonth = false}) {
     switch (bill.type) {
       case BillType.hutang:  return 'Bayar';
       case BillType.piutang: return 'Terima';
-      case BillType.tagihan: return 'Bayar Bulan Ini';
+      case BillType.tagihan:
+        if (paidThisMonth) return 'Bayar Bulan Depan';
+        return 'Bayar Bulan Ini';
     }
   }
 

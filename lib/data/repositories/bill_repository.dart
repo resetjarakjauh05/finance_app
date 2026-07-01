@@ -41,8 +41,8 @@ class BillRepository {
   }) async {
     if (name.trim().isEmpty) throw Exception('Nama tidak boleh kosong');
     if (nominal <= 0) throw Exception('Nominal harus lebih dari 0');
-    if (type == BillType.hutang && categoryId == null) {
-      throw Exception('Kategori wajib dipilih untuk hutang');
+    if ((type == BillType.hutang || type == BillType.tagihan) && categoryId == null) {
+      throw Exception('Kategori wajib dipilih');
     }
 
     final isOnline = await _isOnline();
@@ -101,8 +101,8 @@ class BillRepository {
         notes: transferFee > 0
             ? 'Pinjaman masuk: ${name.trim()} (termasuk biaya transfer)'
             : 'Pinjaman masuk: ${name.trim()}',
-        categoryId: categoryId ?? 'sys_hutang',
-        categoryName: categoryName ?? 'Hutang',
+        categoryId: categoryId ?? 'preset_hutang',
+        categoryName: categoryName ?? 'Bayar Hutang',
         localCreatedAt: DateTime.now(),
       );
       await _transactionService.createTransaction(tx, isOnline);
@@ -123,8 +123,8 @@ class BillRepository {
         notes: transferFee > 0
             ? 'Memberi pinjaman: ${name.trim()} (termasuk biaya transfer)'
             : 'Memberi pinjaman: ${name.trim()}',
-        categoryId: 'sys_piutang',
-        categoryName: 'Piutang',
+        categoryId: 'preset_piutang',
+        categoryName: 'Terima Piutang',
         localCreatedAt: DateTime.now(),
       );
       await _transactionService.createTransaction(tx, isOnline);
@@ -188,11 +188,15 @@ class BillRepository {
         : TransactionCategory.expense;
 
     final txCategoryId = bill.type == BillType.piutang
-        ? 'sys_piutang'
-        : (bill.categoryId ?? 'sys_hutang');
+        ? 'preset_piutang'
+        : bill.type == BillType.tagihan
+            ? (bill.categoryId ?? 'preset_tagihan')
+            : (bill.categoryId ?? 'preset_hutang');
     final txCategoryName = bill.type == BillType.piutang
-        ? 'Piutang'
-        : (bill.categoryName ?? 'Hutang');
+        ? 'Terima Piutang'
+        : bill.type == BillType.tagihan
+            ? (bill.categoryName ?? 'Tagihan & Utilitas')
+            : (bill.categoryName ?? 'Bayar Hutang');
 
     final String txDesc;
     if (bill.type == BillType.hutang) {
@@ -237,8 +241,8 @@ class BillRepository {
         nominal: transferFee,
         date: DateTime.now(),
         notes: 'Biaya transfer pembayaran: ${bill.name}',
-        categoryId: 'uncategorized',
-        categoryName: 'Biaya Transfer',
+        categoryId: 'preset_lainnya',
+        categoryName: 'Lainnya',
         localCreatedAt: DateTime.now(),
       );
       await _transactionService.createTransaction(feeTx, isOnline);

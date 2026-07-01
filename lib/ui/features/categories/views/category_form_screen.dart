@@ -1,13 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../domain/models/category_model.dart';
+import '../../../core/icon_helper.dart';
 import '../view_models/category_view_model.dart';
-
-/// Daftar emoji pilihan untuk icon kategori
-const List<String> kCategoryIcons = [
-  '🍽️', '🚗', '🛍️', '🎮', '💊', '📚', '🧾', '☕', '📈', '📦',
-  '🏠', '✈️', '💪', '🎵', '🐾', '👕', '💄', '🎁', '⚽', '🔧',
-  '💻', '📱', '🎬', '🍕', '🚌', '🏥', '🌿', '💰', '🎓', '❤️',
-];
 
 /// Daftar warna pilihan
 const List<int> kCategoryColors = [
@@ -50,7 +44,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
       _selectedIcon = widget.existing!.icon;
       _selectedColor = widget.existing!.color;
     } else {
-      _selectedIcon = kCategoryIcons.first;
+      _selectedIcon = kCategoryMaterialIcons.first;
       _selectedColor = kCategoryColors.first;
     }
   }
@@ -141,7 +135,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
             CircleAvatar(
               radius: 28,
               backgroundColor: Color(_selectedColor).withValues(alpha: 0.15),
-              child: Text(_selectedIcon, style: const TextStyle(fontSize: 26)),
+              child: Icon(iconFromHex(_selectedIcon), size: 26, color: Color(_selectedColor)),
             ),
             const SizedBox(width: 16),
             Column(
@@ -161,10 +155,10 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: kCategoryIcons.map((icon) {
-        final isSelected = icon == _selectedIcon;
+      children: kCategoryMaterialIcons.map((hex) {
+        final isSelected = hex == _selectedIcon;
         return GestureDetector(
-          onTap: () => setState(() => _selectedIcon = icon),
+          onTap: () => setState(() => _selectedIcon = hex),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             width: 48,
@@ -179,7 +173,11 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                   : null,
             ),
             child: Center(
-              child: Text(icon, style: const TextStyle(fontSize: 22)),
+              child: Icon(
+                iconFromHex(hex),
+                size: 22,
+                color: isSelected ? Color(_selectedColor) : Colors.grey[600],
+              ),
             ),
           ),
         );

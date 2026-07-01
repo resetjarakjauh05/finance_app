@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/icon_helper.dart';
 import '../../../../data/services/transaction_service.dart';
 import '../../../../data/services/payment_method_service.dart';
 import '../../../../data/services/category_service.dart';
@@ -308,7 +309,13 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
                             ),
                           ..._expenseCategories.map((cat) => DropdownMenuItem(
                                 value: cat,
-                                child: Text('${cat.icon} ${cat.name}'),
+                                child: Row(
+                                  children: [
+                                    Icon(iconFromHex(cat.icon), size: 18, color: Color(cat.color)),
+                                    const SizedBox(width: 8),
+                                    Text(cat.name),
+                                  ],
+                                ),
                               )),
                         ],
                         onChanged: (v) =>

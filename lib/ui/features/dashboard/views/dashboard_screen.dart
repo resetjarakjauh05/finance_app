@@ -17,6 +17,7 @@ import '../../../../domain/models/payment_method_model.dart';
 import '../../../../domain/models/spending_limit_model.dart';
 import '../../../../domain/models/monthly_budget_model.dart';
 import '../../../../domain/models/savings_plan_model.dart';
+import '../../../core/icon_helper.dart';
 import '../../auth/view_models/auth_view_model.dart';
 import '../../payment_methods/views/payment_methods_screen.dart';
 import '../../transactions/views/transactions_screen.dart';
@@ -43,6 +44,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late final AuthViewModel _authViewModel;
   int _selectedIndex = 0;
   int _transactionRefreshKey = 0;
+  String? _loadedUserId; // guard agar _loadDashboardData tidak jalan berulang
 
   // Balance state
   int _netBalance = 0;
@@ -93,19 +95,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onAuthStateChanged() {
     if (_authViewModel.isAuthenticated && mounted) {
+      final userId = _authViewModel.currentUser?.id;
+      // Guard: hanya load jika userId berubah (login baru), skip trigger lain
+      if (userId == null || userId == _loadedUserId) return;
+      _loadedUserId = userId;
       _loadDashboardData();
-      // Save FCM token + check bills due (async, non-blocking)
-      final user = _authViewModel.currentUser;
-      if (user != null) {
-        Future.microtask(() async {
-          final notif = NotificationService();
-          await notif.saveTokenToFirestore(user.id);
-          await notif.checkBillsDue(user.id);
-          // Pre-fetch categories & payment methods → cache ke SQLite
-          // agar tersedia saat offline
-          _prefetchOfflineData(user.id);
-        });
-      }
+      Future.microtask(() async {
+        final user = _authViewModel.currentUser;
+        if (user == null) return;
+        final notif = NotificationService();
+        await notif.saveTokenToFirestore(user.id);
+        await notif.checkBillsDue(user.id);
+        _prefetchOfflineData(user.id);
+      });
+    } else if (!_authViewModel.isAuthenticated) {
+      // Reset saat logout agar login ulang trigger load
+      _loadedUserId = null;
     }
   }
 
@@ -128,6 +133,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadDashboardData() async {
+    // Batch: set semua loading flag sekaligus → 1 rebuild
+    if (mounted) {
+      setState(() {
+        _isLoadingBalance = true;
+        _isLoadingRecent = true;
+        _isLoadingProgress = true;
+        _isLoadingMethods = true;
+      });
+    }
     await Future.wait([
       _loadBalance(),
       _loadRecentTransactions(),
@@ -139,10 +153,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadBalance() async {
     final user = _authViewModel.currentUser;
     if (user == null) return;
-    setState(() => _isLoadingBalance = true);
     try {
       final repo = TransactionRepository(service: TransactionService());
-      // Sync Firestore → SQLite dulu agar data terkini
       await repo.initialSyncFromFirestore(user.id);
       final results = await Future.wait([
         repo.getTotalIncome(user.id),
@@ -168,7 +180,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadRecentTransactions() async {
     final user = _authViewModel.currentUser;
     if (user == null) return;
-    setState(() => _isLoadingRecent = true);
     try {
       final repo = TransactionRepository(service: TransactionService());
       final recent = await repo.getRecentTransactions(user.id, limit: 5);
@@ -186,7 +197,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadProgressData() async {
     final user = _authViewModel.currentUser;
     if (user == null) return;
-    setState(() => _isLoadingProgress = true);
     try {
       final now = DateTime.now();
       final yearMonth = MonthlyBudgetService.formatYearMonth(now);
@@ -232,7 +242,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadPaymentMethodBalances() async {
     final user = _authViewModel.currentUser;
     if (user == null) return;
-    setState(() => _isLoadingMethods = true);
     try {
       final txRepo = TransactionRepository(service: TransactionService());
       final pmRepo = PaymentMethodRepository(
@@ -637,9 +646,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(children: [
-                            const Icon(Icons.account_balance_wallet_outlined, size: 14, color: Colors.grey),
+                            Icon(iconFromHex(b.categoryIcon),
+                                size: 14,
+                                color: Colors.grey),
                             const SizedBox(width: 4),
-                            Expanded(child: Text('${b.categoryIcon} ${b.categoryName}',
+                            Expanded(child: Text(b.categoryName,
                                 style: const TextStyle(fontSize: 12, color: Colors.grey))),
                             Text('${_currencyFormat.format(actual)} / ${_currencyFormat.format(b.budgetAmount)}',
                                 style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.bold)),
@@ -672,7 +683,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(children: [
-                            Text(p.icon ?? '🐷', style: const TextStyle(fontSize: 14)),
+                            Icon(iconFromHex(p.icon ?? kSavingsMaterialIcons.first), size: 14, color: Colors.teal),
                             const SizedBox(width: 4),
                             Expanded(child: Text(p.name,
                                 style: const TextStyle(fontSize: 12, color: Colors.grey))),
@@ -736,10 +747,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               leading: CircleAvatar(
                                 backgroundColor: _methodColor(m.type)
                                     .withAlpha(30),
-                                child: Text(
-                                  m.type.icon,
-                                  style: const TextStyle(fontSize: 18),
-                                ),
+                                child: Icon(m.type.iconData, size: 18),
                               ),
                               title: Text(
                                 m.name,

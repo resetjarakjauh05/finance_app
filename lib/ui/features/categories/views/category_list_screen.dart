@@ -3,6 +3,7 @@ import '../../../../domain/models/category_model.dart';
 import '../../../../data/repositories/category_repository.dart';
 import '../../../../data/services/category_service.dart';
 import '../../../../data/local/category_dao.dart';
+import '../../../core/icon_helper.dart';
 import '../view_models/category_view_model.dart';
 import 'category_form_screen.dart';
 
@@ -192,7 +193,7 @@ class _CategoryTile extends StatelessWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: Color(category.color).withValues(alpha: 0.15),
-        child: Text(category.icon, style: const TextStyle(fontSize: 20)),
+        child: Icon(iconFromHex(category.icon), size: 20, color: Color(category.color)),
       ),
       title: Text(category.name),
       subtitle: category.isPreset

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'payment_method_model.freezed.dart';
@@ -46,16 +47,16 @@ extension PaymentMethodTypeExtension on PaymentMethodType {
     }
   }
 
-  String get icon {
+  IconData get iconData {
     switch (this) {
       case PaymentMethodType.cash:
-        return '💵';
+        return Icons.payments_outlined;
       case PaymentMethodType.bank:
-        return '🏦';
+        return Icons.account_balance_outlined;
       case PaymentMethodType.wallet:
-        return '💳';
+        return Icons.credit_card_outlined;
       case PaymentMethodType.digital:
-        return '📱';
+        return Icons.phone_android_outlined;
     }
   }
 }

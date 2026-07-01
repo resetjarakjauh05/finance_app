@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../../domain/models/savings_plan_model.dart';
 import '../../../../data/repositories/savings_plan_repository.dart';
 import '../../../../data/services/savings_plan_service.dart';
+import '../../../core/icon_helper.dart';
 import '../../../../data/local/savings_plan_dao.dart';
 
 class SavingsHistoryScreen extends StatefulWidget {
@@ -82,8 +83,8 @@ class _SavingsHistoryScreenState extends State<SavingsHistoryScreen> {
               children: [
                 Row(
                   children: [
-                    Text(widget.plan.icon ?? '🐷',
-                        style: const TextStyle(fontSize: 28)),
+                    Icon(iconFromHex(widget.plan.icon ?? kSavingsMaterialIcons.first),
+                        size: 28, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
