@@ -57,10 +57,14 @@ class _BillsScreenState extends State<BillsScreen>
     super.dispose();
   }
 
-  void _navigateToAddEdit({BillModel? bill}) async {
+  void _navigateToAddEdit({BillModel? bill, BillType? initialType}) async {
     final result = await Navigator.of(context).push<String>(
       MaterialPageRoute(
-        builder: (_) => AddEditBillScreen(userId: widget.userId, bill: bill),
+        builder: (_) => AddEditBillScreen(
+          userId: widget.userId,
+          bill: bill,
+          initialType: initialType,
+        ),
       ),
     );
     if (result != null && mounted) {
@@ -213,7 +217,10 @@ class _BillsScreenState extends State<BillsScreen>
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'bills_fab',
-        onPressed: () => _navigateToAddEdit(),
+        onPressed: () {
+          final types = [BillType.hutang, BillType.piutang, BillType.tagihan];
+          _navigateToAddEdit(initialType: types[_tabController.index]);
+        },
         icon: const Icon(Icons.add),
         label: const Text('Tambah'),
       ),
@@ -240,6 +247,8 @@ class _BillsScreenState extends State<BillsScreen>
 
     return Column(
       children: [
+        // Summary card
+        _buildSummaryCard(type),
         // Filter chips
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -285,6 +294,138 @@ class _BillsScreenState extends State<BillsScreen>
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSummaryCard(BillType type) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final totalNominal = _viewModel.getTotalNominal(type);
+    final totalRemaining = _viewModel.getTotalRemaining(type);
+    final totalPaid = totalNominal - totalRemaining;
+    final countUnpaid = _viewModel.getCountUnpaid(type);
+    final progress = totalNominal > 0 ? totalPaid / totalNominal : 0.0;
+
+    final Map<BillType, ({Color color, Color onColor, IconData icon, String labelSisa}
+    )> config = {
+      BillType.hutang: (
+        color: Colors.red.shade600,
+        onColor: Colors.white,
+        icon: Icons.arrow_upward_rounded,
+        labelSisa: 'Sisa hutang',
+      ),
+      BillType.piutang: (
+        color: Colors.green.shade600,
+        onColor: Colors.white,
+        icon: Icons.arrow_downward_rounded,
+        labelSisa: 'Belum diterima',
+      ),
+      BillType.tagihan: (
+        color: colorScheme.primary,
+        onColor: colorScheme.onPrimary,
+        icon: Icons.receipt_long_outlined,
+        labelSisa: 'Belum dibayar',
+      ),
+    };
+
+    final cfg = config[type]!;
+
+    if (totalNominal == 0) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cfg.color,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top row: icon + label + count badge
+          Row(
+            children: [
+              Icon(cfg.icon, color: cfg.onColor.withValues(alpha: 0.85), size: 18),
+              const SizedBox(width: 6),
+              Text(
+                type.displayName,
+                style: TextStyle(
+                  color: cfg.onColor.withValues(alpha: 0.85),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              const Spacer(),
+              if (countUnpaid > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: cfg.onColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$countUnpaid belum lunas',
+                    style: TextStyle(
+                      color: cfg.onColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Remaining amount (big)
+          Text(
+            _currencyFormat.format(totalRemaining),
+            style: TextStyle(
+              color: cfg.onColor,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+          ),
+          Text(
+            cfg.labelSisa,
+            style: TextStyle(
+              color: cfg.onColor.withValues(alpha: 0.75),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress.clamp(0.0, 1.0),
+              backgroundColor: cfg.onColor.withValues(alpha: 0.25),
+              valueColor: AlwaysStoppedAnimation<Color>(cfg.onColor),
+              minHeight: 6,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Bottom: sudah lunas vs total
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Sudah: ${_currencyFormat.format(totalPaid)}',
+                style: TextStyle(
+                  color: cfg.onColor.withValues(alpha: 0.8),
+                  fontSize: 11,
+                ),
+              ),
+              Text(
+                'Total: ${_currencyFormat.format(totalNominal)}',
+                style: TextStyle(
+                  color: cfg.onColor.withValues(alpha: 0.8),
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

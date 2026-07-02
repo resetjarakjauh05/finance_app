@@ -20,8 +20,9 @@ import '../view_models/bill_view_model.dart';
 class AddEditBillScreen extends StatefulWidget {
   final String userId;
   final BillModel? bill;
+  final BillType? initialType;
 
-  const AddEditBillScreen({super.key, required this.userId, this.bill});
+  const AddEditBillScreen({super.key, required this.userId, this.bill, this.initialType});
 
   @override
   State<AddEditBillScreen> createState() => _AddEditBillScreenState();
@@ -83,6 +84,8 @@ class _AddEditBillScreenState extends State<AddEditBillScreen> {
         _maxInstallmentsController.text = b.maxInstallments.toString();
       }
       // installmentAmount dihitung otomatis dari nominal × maxInstallments
+    } else if (widget.initialType != null) {
+      _selectedType = widget.initialType!;
     }
     _loadCategories();
     _loadPaymentMethods();

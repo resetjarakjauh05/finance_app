@@ -21,6 +21,25 @@ class BillViewModel extends ChangeNotifier {
   List<BillModel> get paidBills =>
       _bills.where((b) => b.status == BillStatus.paid && !b.isDeleted).toList();
 
+  // Total summary per tipe
+  int getTotalNominal(BillType type) {
+    return _bills
+        .where((b) => b.type == type && !b.isDeleted)
+        .fold(0, (sum, b) => sum + b.nominal);
+  }
+
+  int getTotalRemaining(BillType type) {
+    return _bills
+        .where((b) => b.type == type && !b.isDeleted && b.status != BillStatus.paid)
+        .fold(0, (sum, b) => sum + b.remainingAmount);
+  }
+
+  int getCountUnpaid(BillType type) {
+    return _bills
+        .where((b) => b.type == type && !b.isDeleted && b.status != BillStatus.paid)
+        .length;
+  }
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
