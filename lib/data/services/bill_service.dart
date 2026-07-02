@@ -11,10 +11,14 @@ class BillService {
   final ConnectivityService _connectivity = ConnectivityService();
   final PendingOperationsDao _pendingOpsDao = PendingOperationsDao();
 
-  CollectionReference _col(String userId) => _firestore
+  CollectionReference<Map<String, dynamic>> _col(String userId) => _firestore
       .collection('bills')
       .doc(userId)
-      .collection('items');
+      .collection('items')
+      .withConverter<Map<String, dynamic>>(
+        fromFirestore: (snap, _) => snap.data()!,
+        toFirestore: (data, _) => data,
+      );
 
   // ===== SQLite CRUD =====
 
@@ -134,6 +138,48 @@ class BillService {
     // Offline fallback
     final rows = await _billDao.getAllByUserId(userId, status: status);
     return rows.map((r) => BillModelExtension.fromSqlite(r)).toList();
+  }
+
+  /// Realtime stream Firestore → auto-update semua device
+  Stream<List<BillModel>> watchBills(String userId) async* {
+    final isOnline = await _connectivity.isOnline();
+    if (!isOnline) {
+      // Offline → emit SQLite once
+      final rows = await _billDao.getAllByUserId(userId);
+      yield rows.map((r) => BillModelExtension.fromSqlite(r)).toList();
+      return;
+    }
+
+    // Online → stream Firestore snapshots
+    yield* _col(userId)
+        .orderBy('dueDate')
+        .snapshots()
+        .asyncMap((snapshot) async {
+      final bills = <BillModel>[];
+      for (final doc in snapshot.docs) {
+        try {
+          final bill = _fromFirestore(doc.id, doc.data());
+          if (!bill.isDeleted) bills.add(bill);
+        } catch (e) {
+          debugPrint('watchBills skip ${doc.id}: $e');
+        }
+      }
+      // Cache ke SQLite
+      await _cacheBillsToSqlite(bills);
+
+      // Merge unsynced local
+      final allLocal = await _billDao.getAllByUserId(userId);
+      final unsyncedLocal = allLocal
+          .where((r) => (r['isSynced'] as int? ?? 0) == 0 && r['firebaseDocId'] == null)
+          .map((r) => BillModelExtension.fromSqlite(r))
+          .toList();
+      if (unsyncedLocal.isNotEmpty) {
+        final merged = [...bills, ...unsyncedLocal];
+        merged.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+        return merged;
+      }
+      return bills;
+    });
   }
 
   /// Parse Firestore doc → BillModel

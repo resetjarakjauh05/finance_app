@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../../../domain/models/bill_model.dart';
 import '../../../../domain/models/payment_method_model.dart';
@@ -12,6 +13,8 @@ class BillViewModel extends ChangeNotifier {
 
   List<BillModel> _bills = [];
   List<BillModel> get bills => _bills;
+
+  StreamSubscription<List<BillModel>>? _billsSubscription;
 
   List<BillModel> get unpaidBills => _bills
       .where((b) => b.status != BillStatus.paid && !b.isDeleted)
@@ -58,7 +61,27 @@ class BillViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> init() async => await loadBills();
+  Future<void> init() async {
+    _setLoading(true);
+    _clearError();
+    try {
+      // Subscribe to realtime stream
+      _billsSubscription = _repository.watchBills(userId).listen(
+        (bills) {
+          _bills = bills;
+          _setLoading(false);
+          notifyListeners();
+        },
+        onError: (e) {
+          _setError(e.toString());
+          _setLoading(false);
+        },
+      );
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+    }
+  }
 
   Future<BillModel?> createBill({
     required String name,
@@ -155,5 +178,11 @@ class BillViewModel extends ChangeNotifier {
 
   void _clearError() {
     _errorMessage = null;
+  }
+
+  @override
+  void dispose() {
+    _billsSubscription?.cancel();
+    super.dispose();
   }
 }

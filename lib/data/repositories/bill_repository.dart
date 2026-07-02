@@ -259,6 +259,10 @@ class BillRepository {
     return await _service.getBills(userId, status: status?.name);
   }
 
+  Stream<List<BillModel>> watchBills(String userId) {
+    return _service.watchBills(userId);
+  }
+
   /// Get bills filtered by type
   Future<List<BillModel>> getBillsByType(String userId, BillType type) async {
     final all = await _service.getBills(userId);
