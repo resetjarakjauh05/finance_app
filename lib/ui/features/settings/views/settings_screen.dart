@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../../../data/services/auth_service.dart';
 import '../../../../data/repositories/auth_repository.dart';
 import '../../auth/view_models/auth_view_model.dart';
@@ -24,6 +25,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late final AuthViewModel _authViewModel;
   late String _currentDisplayName;
+  String _appVersion = '...';
 
   @override
   void initState() {
@@ -32,6 +34,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _authViewModel = AuthViewModel(
       authRepository: AuthRepository(authService: AuthService()),
     );
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    setState(() => _appVersion = 'v${info.version}');
   }
 
   @override
@@ -287,11 +295,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: const Text('Tentang Aplikasi'),
-            subtitle: const Text('Aplikasi Keuangan v1.0.0'),
+            subtitle: Text('Aplikasi Keuangan $_appVersion'),
             onTap: () => showAboutDialog(
               context: context,
               applicationName: 'Aplikasi Keuangan',
-              applicationVersion: '1.0.0',
+              applicationVersion: _appVersion,
               applicationIcon: const Icon(Icons.account_balance_wallet, size: 48),
               children: const [
                 Text('Aplikasi tracking keuangan personal dengan Firebase & SQLite.'),

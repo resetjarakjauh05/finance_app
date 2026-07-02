@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../data/services/auth_service.dart';
 import '../../../../data/services/transaction_service.dart';
@@ -77,6 +78,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   );
 
   final _dateFormat = DateFormat('dd MMM', 'id_ID');
+  String _appVersion = '...';
 
   @override
   void initState() {
@@ -85,6 +87,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       authRepository: AuthRepository(authService: AuthService()),
     );
     _authViewModel.addListener(_onAuthStateChanged);
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    setState(() => _appVersion = 'v${info.version}');
   }
 
   @override
@@ -1124,7 +1132,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           onTap: () => showAboutDialog(
             context: context,
             applicationName: 'Aplikasi Keuangan',
-            applicationVersion: '1.0.0',
+            applicationVersion: _appVersion,
             applicationIcon: const Icon(
               Icons.account_balance_wallet,
               size: 48,
