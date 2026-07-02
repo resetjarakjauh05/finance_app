@@ -1,7 +1,7 @@
 name: financial_app
 description: "Personal Financial Tracker App with Flutter & Firebase"
 publish_to: 'none'
-version: 1.0.1+2
+version: 1.0.2+3
 
 environment:
   sdk: ^3.8.0
