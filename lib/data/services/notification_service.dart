@@ -190,6 +190,19 @@ class NotificationService {
         final status = (data['status'] as String? ?? '').toUpperCase();
         if (status == 'PAID') continue;
 
+        // Skip tagihan recurring yang sudah dibayar bulan ini
+        // Recurring = punya billingDay. Setelah bayar, updatedAt diset ke bulan ini.
+        final billingDay = data['billingDay'] as int?;
+        if (billingDay != null) {
+          final updatedAt = (data['updatedAt'] as dynamic)?.toDate() as DateTime?;
+          if (updatedAt != null &&
+              updatedAt.year == now.year &&
+              updatedAt.month == now.month) {
+            // Sudah ada aktivitas bayar bulan ini → skip notif
+            continue;
+          }
+        }
+
         final dueDate = (data['dueDate'] as dynamic)?.toDate() as DateTime?;
         if (dueDate == null) continue;
 
