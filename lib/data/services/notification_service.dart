@@ -164,12 +164,16 @@ class NotificationService {
   }
 
   /// Check tagihan jatuh tempo → notifikasi lokal
+  /// Anti-spam: max 1x notif per docId per hari
+  /// Skip jika status PAID (sudah lunas)
   Future<void> checkBillsDue(String userId) async {
+    await _ensureInitialized();
     try {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final tomorrow = today.add(const Duration(days: 1));
       final in3days = today.add(const Duration(days: 3));
+      final todayStr = DateFormat('yyyy-MM-dd').format(now);
 
       final snapshot = await FirebaseFirestore.instance
           .collection('bills')
@@ -179,30 +183,43 @@ class NotificationService {
           .get();
 
       for (int i = 0; i < snapshot.docs.length; i++) {
-        final data = snapshot.docs[i].data();
+        final doc = snapshot.docs[i];
+        final data = doc.data();
+
+        // Validasi status: skip jika sudah PAID (double-check client-side)
+        final status = (data['status'] as String? ?? '').toUpperCase();
+        if (status == 'PAID') continue;
+
         final dueDate = (data['dueDate'] as dynamic)?.toDate() as DateTime?;
         if (dueDate == null) continue;
 
         final due = DateTime(dueDate.year, dueDate.month, dueDate.day);
-        String? message;
 
+        // Tentukan label waktu jatuh tempo
+        String? message;
         if (due == today) {
           message = 'Tagihan "${data['name']}" jatuh tempo HARI INI!';
         } else if (due == tomorrow) {
           message = 'Tagihan "${data['name']}" jatuh tempo BESOK';
         } else if (due.isAfter(today) && due.isBefore(in3days)) {
           final daysLeft = due.difference(today).inDays;
-          message =
-              'Tagihan "${data['name']}" jatuh tempo dalam $daysLeft hari';
+          message = 'Tagihan "${data['name']}" jatuh tempo dalam $daysLeft hari';
         }
 
-        if (message != null) {
-          await _showLocalNotification(
-            id: i + 100,
-            title: '⚠️ Pengingat Tagihan',
-            body: message,
-          );
-        }
+        if (message == null) continue;
+
+        // Anti-spam throttle: max 1x per docId per hari
+        final throttleKey = 'bill_${doc.id}_$todayStr';
+        if (_lastNotifDate[throttleKey] == todayStr) continue;
+
+        await _showLocalNotification(
+          id: i + 100,
+          title: '⚠️ Pengingat Tagihan',
+          body: message,
+        );
+
+        // Tandai sudah notif hari ini
+        _lastNotifDate[throttleKey] = todayStr;
       }
     } catch (e) {
       debugPrint('checkBillsDue error: $e');
